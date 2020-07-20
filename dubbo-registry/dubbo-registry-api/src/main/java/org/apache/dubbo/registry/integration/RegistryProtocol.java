@@ -372,12 +372,15 @@ public class RegistryProtocol implements Protocol {
     @Override
     @SuppressWarnings("unchecked")
     public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
+    	// 拼凑url
         url = URLBuilder.from(url)
                 .setProtocol(url.getParameter(REGISTRY_KEY, DEFAULT_REGISTRY))
                 .removeParameter(REGISTRY_KEY)
                 .build();
+        // 获取注册中心
         Registry registry = registryFactory.getRegistry(url);
         if (RegistryService.class.equals(type)) {
+            // 若构造的invoker是RegistryService类型
             return proxyFactory.getInvoker((T) registry, type, url);
         }
 

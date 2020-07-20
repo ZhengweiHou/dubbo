@@ -70,21 +70,28 @@ public class MockClusterInvoker<T> implements Invoker<T> {
 
     @Override
     public Result invoke(Invocation invocation) throws RpcException {
+		// 当没有配置mock，则直接往下调用 服务提供者暴露接口。
+		// 有配置强制mock 的化，那么不进行远端调用，而直接调用本地mock实现
+		// 有mock，则当调用服务提供者失败时候，会使用本地mock实现兜底
+    	
+    	// invocation = RpcInvocation
         Result result = null;
-
+        // 是否配置了mock FIXME mock再哪配置的，url怎么组装出来的？？？
         String value = directory.getUrl().getMethodParameter(invocation.getMethodName(), MOCK_KEY, Boolean.FALSE.toString()).trim();
         if (value.length() == 0 || value.equalsIgnoreCase("false")) {
             //no mock
             result = this.invoker.invoke(invocation);
         } else if (value.startsWith("force")) {
+        	// 强制 mock
             if (logger.isWarnEnabled()) {
                 logger.warn("force-mock: " + invocation.getMethodName() + " force-mock enabled , url : " + directory.getUrl());
             }
             //force:direct mock
             result = doMockInvoke(invocation, null);
         } else {
-            //fail-mock
+            // 存在mock，则在远程调用失败后，调用mock，算是熔断兜底
             try {
+            	// 远程调用
                 result = this.invoker.invoke(invocation);
             } catch (RpcException e) {
                 if (e.isBiz()) {
@@ -94,6 +101,7 @@ public class MockClusterInvoker<T> implements Invoker<T> {
                 if (logger.isWarnEnabled()) {
                     logger.warn("fail-mock: " + invocation.getMethodName() + " fail-mock enabled , url : " + directory.getUrl(), e);
                 }
+                // 远程失败调用mock
                 result = doMockInvoke(invocation, e);
             }
         }

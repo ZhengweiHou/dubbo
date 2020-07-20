@@ -291,9 +291,9 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
 
     public void checkAndUpdateSubConfigs() {
         // Use default configs defined explicitly on global configs
-        completeCompoundConfigs();
+        completeCompoundConfigs();	// 初始化默认配置
         // Config Center should always being started first.
-        startConfigCenter();
+        startConfigCenter();	// 通过configCenter更新配置，如果有配置configCenter的话
         checkDefault();
         checkProtocol();
         checkApplication();
@@ -366,6 +366,7 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
     }
 
     public synchronized void export() {
+    	// 检查并更新一些配置
         checkAndUpdateSubConfigs();
 
         if (!shouldExport()) {

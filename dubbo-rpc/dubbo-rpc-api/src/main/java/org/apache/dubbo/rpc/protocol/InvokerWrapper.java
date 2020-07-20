@@ -53,7 +53,9 @@ public class InvokerWrapper<T> implements Invoker<T> {
 
     @Override
     public Result invoke(Invocation invocation) throws RpcException {
-        return invoker.invoke(invocation);
+    	//  -> （ProtocolFilterWrapper.buildInvokerChain初始化的内部类CallbackRegistrationInvoker).invoke
+    	// FIXME ProtocolFilterWrapper和InvokerWrapper是什么关系，前者是后者的包装类？？？
+        return invoker.invoke(invocation); 
     }
 
     @Override

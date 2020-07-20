@@ -148,6 +148,8 @@ public abstract class AbstractInvoker<T> implements Invoker<T> {
             invocation.addAttachments(contextAttachments);
         }
 
+        // 通过url和invocation获取调用模式，并设置到invocation中，
+        // 在AsyncToSyncInvoker中会使用到，判断是否异步调用,若异步则不阻塞等待，直接返回调用结果
         invocation.setInvokeMode(RpcUtils.getInvokeMode(url, invocation));
         RpcUtils.attachInvocationIdIfAsync(getUrl(), invocation);
 

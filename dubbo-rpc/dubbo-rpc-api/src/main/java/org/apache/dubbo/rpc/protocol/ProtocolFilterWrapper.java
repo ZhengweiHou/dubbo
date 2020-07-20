@@ -52,6 +52,9 @@ public class ProtocolFilterWrapper implements Protocol {
 
     private static <T> Invoker<T> buildInvokerChain(final Invoker<T> invoker, String key, String group) {
         Invoker<T> last = invoker;
+        
+        // 获取符合要求的Filter列表，通过作用域等  FIXME 怎么控制过滤器顺序？有哪些维度去控制？
+        // ConsumerContextFilter、MonitorFilter、FutureFilter
         List<Filter> filters = ExtensionLoader.getExtensionLoader(Filter.class).getActivateExtension(invoker.getUrl(), key, group);
 
         if (!filters.isEmpty()) {
@@ -154,8 +157,12 @@ public class ProtocolFilterWrapper implements Protocol {
 
         @Override
         public Result invoke(Invocation invocation) throws RpcException {
-            Result asyncResult = filterInvoker.invoke(invocation);
-
+        	// 当前内部类CallbackRegistrationInvoker由buildInvokerChain方法构造
+        	// 此处的filterInvoker是在buildInvokerChain方法中初始化的一个匿名类，具体查看buildInvokerChain方法
+            Result asyncResult = filterInvoker.invoke(invocation); // 这是一个链式调用，执行一串过滤器
+            // 默认调用链 ConsumerContextFilter -> FutureFilter -> MonitorFilter
+            //-> ExecuteLimitFilter{-> <AsyncToSyncInvoker>ListenerInvokerWrapper.invoke()}
+            
             asyncResult = asyncResult.whenCompleteWithContext((r, t) -> {
                 for (int i = filters.size() - 1; i >= 0; i--) {
                     Filter filter = filters.get(i);

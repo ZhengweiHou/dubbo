@@ -56,29 +56,39 @@ public class FailoverClusterInvoker<T> extends AbstractClusterInvoker<T> {
     @SuppressWarnings({"unchecked", "rawtypes"})
     public Result doInvoke(Invocation invocation, final List<Invoker<T>> invokers, LoadBalance loadbalance) throws RpcException {
         List<Invoker<T>> copyInvokers = invokers;
+        
+        // 检查可用invokers
         checkInvokers(copyInvokers, invocation);
         String methodName = RpcUtils.getMethodName(invocation);
+        // 根据方法名获取重试次数，默认2+1，最少为0+1
         int len = getUrl().getMethodParameter(methodName, RETRIES_KEY, DEFAULT_RETRIES) + 1;
         if (len <= 0) {
             len = 1;
         }
-        // retry loop.
+        // 定义le，用于记录最后一次调用时错误
         RpcException le = null; // last exception.
         List<Invoker<T>> invoked = new ArrayList<Invoker<T>>(copyInvokers.size()); // invoked invokers.
         Set<String> providers = new HashSet<String>(len);
+        
         for (int i = 0; i < len; i++) {
             //Reselect before retry to avoid a change of candidate `invokers`.
             //NOTE: if `invokers` changed, then `invoked` also lose accuracy.
-            if (i > 0) {
+            if (i > 0) {	// i>0 表示第一次调用不会触发
+            	// 除第一次调用外，后续每次重试都需要检查invokers的状态，
+            	// 防止invoker被改变，造成调用准确性无法保证
                 checkWhetherDestroyed();
-                copyInvokers = list(invocation);
+                copyInvokers = list(invocation); // 重新获取可用invoker
                 // check again
                 checkInvokers(copyInvokers, invocation);
             }
+            // 负载均衡，选择一个invoker
             Invoker<T> invoker = select(loadbalance, invocation, copyInvokers, invoked);
-            invoked.add(invoker);
+            
+            invoked.add(invoker); // 将即将被调用的invoker加入到已调用列表 FIXME 用于负载均衡？？
+            // 已调用列表加入到上下文中 FIXME 为什么这么做？什么作用？？？
             RpcContext.getContext().setInvokers((List) invoked);
             try {
+            	// 执行invoker调用 -> InvokerWrapper.invoker
                 Result result = invoker.invoke(invocation);
                 if (le != null && logger.isWarnEnabled()) {
                     logger.warn("Although retry the method " + methodName

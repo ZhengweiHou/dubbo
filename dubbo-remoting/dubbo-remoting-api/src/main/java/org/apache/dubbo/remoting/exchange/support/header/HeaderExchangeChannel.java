@@ -88,7 +88,7 @@ final class HeaderExchangeChannel implements ExchangeChannel {
         if (message instanceof Request
                 || message instanceof Response
                 || message instanceof String) {
-            channel.send(message, sent);
+            channel.send(message, sent); // NettyClient
         } else {
             Request request = new Request();
             request.setVersion(Version.getProtocolVersion());

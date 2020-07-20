@@ -49,9 +49,11 @@ public class AsyncToSyncInvoker<T> implements Invoker<T> {
 
     @Override
     public Result invoke(Invocation invocation) throws RpcException {
+    	// 如果使用的是默认的Dubbo协议,则此处Invoker=DubboInvoker
         Result asyncResult = invoker.invoke(invocation);
 
         try {
+        	// 若果是同步调用，则get阻塞等待结果
             if (InvokeMode.SYNC == ((RpcInvocation) invocation).getInvokeMode()) {
                 asyncResult.get(Integer.MAX_VALUE, TimeUnit.MILLISECONDS);
             }

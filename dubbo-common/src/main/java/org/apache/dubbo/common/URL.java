@@ -695,6 +695,7 @@ class URL implements Serializable {
     }
 
     public String getMethodParameter(String method, String key) {
+    	// 先获取methodName.key，若没获取到，则获取key对应的值
         String value = parameters.get(method + "." + key);
         return StringUtils.isEmpty(value) ? getParameter(key) : value;
     }

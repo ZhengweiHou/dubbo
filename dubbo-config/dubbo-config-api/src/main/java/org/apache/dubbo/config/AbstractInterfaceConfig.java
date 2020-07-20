@@ -204,6 +204,7 @@ public abstract class AbstractInterfaceConfig extends AbstractMethodConfig {
             }
         }
 
+        // 若果有必要，则使用注册表进行配置
         useRegistryForConfigIfNecessary();
     }
 
@@ -737,6 +738,7 @@ public abstract class AbstractInterfaceConfig extends AbstractMethodConfig {
         return application;
     }
 
+    // 设置application
     public void setApplication(ApplicationConfig application) {
         ConfigManager.getInstance().setApplication(application);
         this.application = application;
@@ -771,6 +773,7 @@ public abstract class AbstractInterfaceConfig extends AbstractMethodConfig {
         return CollectionUtils.isEmpty(registries) ? null : registries.get(0);
     }
 
+    // 设置单个注册中心
     public void setRegistry(RegistryConfig registry) {
         List<RegistryConfig> registries = new ArrayList<RegistryConfig>(1);
         registries.add(registry);
@@ -781,6 +784,7 @@ public abstract class AbstractInterfaceConfig extends AbstractMethodConfig {
         return registries;
     }
 
+    // 设置多个注册中心配置
     @SuppressWarnings({"unchecked"})
     public void setRegistries(List<? extends RegistryConfig> registries) {
         ConfigManager.getInstance().addRegistries((List<RegistryConfig>) registries);
