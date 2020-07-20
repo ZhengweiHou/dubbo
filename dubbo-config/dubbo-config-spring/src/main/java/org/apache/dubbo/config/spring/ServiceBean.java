@@ -340,18 +340,18 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
         publishExportEvent();
     }
 
+    @Override
+    public void destroy() throws Exception {
+        // no need to call unexport() here, see
+        // org.apache.dubbo.config.spring.extension.SpringExtensionFactory.ShutdownHookListener
+    }
+
     /**
      * @since 2.6.5
      */
     private void publishExportEvent() {
         ServiceBeanExportedEvent exportEvent = new ServiceBeanExportedEvent(this);
         applicationEventPublisher.publishEvent(exportEvent);
-    }
-
-    @Override
-    public void destroy() throws Exception {
-        // no need to call unexport() here, see
-        // org.apache.dubbo.config.spring.extension.SpringExtensionFactory.ShutdownHookListener
     }
 
     // merged from dubbox

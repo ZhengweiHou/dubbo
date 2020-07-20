@@ -193,6 +193,7 @@ public abstract class AbstractInterfaceConfig extends AbstractMethodConfig {
      * Check whether the registry config is exists, and then conversion it to {@link RegistryConfig}
      */
     protected void checkRegistry() {
+        //
         loadRegistriesFromBackwardConfig();
 
         convertRegistryIdsToRegistries();
@@ -325,23 +326,41 @@ public abstract class AbstractInterfaceConfig extends AbstractMethodConfig {
      * @return
      */
     protected List<URL> loadRegistries(boolean provider) {
+        // 配置中心配置类的检测在前面ServiceConfig#checkAndUpdateSubConfigs方法中做过了
         // check && override if necessary
         List<URL> registryList = new ArrayList<URL>();
         if (CollectionUtils.isNotEmpty(registries)) {
+            // 遍历注册中心配置
             for (RegistryConfig config : registries) {
                 String address = config.getAddress();
                 if (StringUtils.isEmpty(address)) {
+                    // 地址为空则设置为 0.0.0.0
                     address = ANYHOST_VALUE;
                 }
-                if (!RegistryConfig.NO_AVAILABLE.equalsIgnoreCase(address)) {
+
+
+                if (!RegistryConfig.NO_AVAILABLE.equalsIgnoreCase(address)) { // 地址合法
+
+                    // 组装参数用于转换成URL的原料
                     Map<String, String> map = new HashMap<String, String>();
                     appendParameters(map, application);
                     appendParameters(map, config);
+
+                    // path
                     map.put(PATH_KEY, RegistryService.class.getName());
+
+                    // dubbo、release、timestamp、pid    TODO 包括上面的path和下面的protocol都有什么用？
                     appendRuntimeParameters(map);
+
+                    // protocol
                     if (!map.containsKey(PROTOCOL_KEY)) {
+                        // 若参数中没指定协议，则默认“dubbo”
                         map.put(PROTOCOL_KEY, DUBBO_PROTOCOL);
                     }
+
+
+                    // 解析得到 URL 列表，address 可能包含多个注册中心 ip，
+                    // 因此解析得到的是一个 URL 列表
                     List<URL> urls = UrlUtils.parseURLs(address, map);
 
                     for (URL url : urls) {
@@ -349,6 +368,10 @@ public abstract class AbstractInterfaceConfig extends AbstractMethodConfig {
                                 .addParameter(REGISTRY_KEY, url.getProtocol())
                                 .setProtocol(REGISTRY_PROTOCOL)
                                 .build();
+
+                        // 通过判断条件，决定是否添加 url 到 registryList 中，条件如下：
+                        //    (服务提供者 && register = true 或 null)
+                        // || (非服务提供者 && subscribe = true 或 null)
                         if ((provider && url.getParameter(REGISTER_KEY, true))
                                 || (!provider && url.getParameter(SUBSCRIBE_KEY, true))) {
                             registryList.add(url);
@@ -586,7 +609,7 @@ public abstract class AbstractInterfaceConfig extends AbstractMethodConfig {
                         "are :" + registryIds + ", but got " + tmpRegistries.size() + " registries!");
             }
 
-            setRegistries(tmpRegistries);
+            setRegistries(tmpRegistries); // 这是增量添加哦！！！
         }
 
     }
@@ -595,9 +618,11 @@ public abstract class AbstractInterfaceConfig extends AbstractMethodConfig {
         // for backward compatibility
         // -Ddubbo.registry.address is now deprecated.
         if (registries == null || registries.isEmpty()) {
+            // 从系统属性中加载注册中心地址
             String address = ConfigUtils.getProperty("dubbo.registry.address");
             if (address != null && address.length() > 0) {
                 List<RegistryConfig> tmpRegistries = new ArrayList<RegistryConfig>();
+                // 注册中心地址可以配置多个用空格或|分割
                 String[] as = address.split("\\s*[|]+\\s*");
                 for (String a : as) {
                     RegistryConfig registryConfig = new RegistryConfig();

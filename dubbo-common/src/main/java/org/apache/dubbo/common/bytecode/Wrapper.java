@@ -106,6 +106,7 @@ public abstract class Wrapper {
     public static Wrapper getWrapper(Class<?> c) {
         while (ClassGenerator.isDynamicClass(c)) // can not wrapper on dynamic class.
         {
+            // 透过所有动态类，选找到其基础非动态类 TODO 动态类是代码生成器生成的类？
             c = c.getSuperclass();
         }
 
@@ -115,6 +116,7 @@ public abstract class Wrapper {
 
         Wrapper ret = WRAPPER_MAP.get(c);
         if (ret == null) {
+            // 构造包装类
             ret = makeWrapper(c);
             WRAPPER_MAP.put(c, ret);
         }
@@ -235,6 +237,7 @@ public abstract class Wrapper {
 
         // make class
         long id = WRAPPER_CLASS_COUNTER.getAndIncrement();
+        // ClassGenerator 封装javassist，实现Sring TO Class
         ClassGenerator cc = ClassGenerator.newInstance(cl);
         cc.setClassName((Modifier.isPublic(c.getModifiers()) ? Wrapper.class.getName() : c.getName() + "$sw") + id);
         cc.setSuperClass(Wrapper.class);

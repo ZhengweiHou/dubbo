@@ -47,6 +47,8 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * ClassGenerator
  */
+
+//ClassGenerator 封装javassist，实现Sring TO Class？？
 public final class ClassGenerator {
 
     private static final AtomicLong CLASS_NAME_COUNTER = new AtomicLong(0);

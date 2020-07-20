@@ -289,6 +289,14 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         return unexported;
     }
 
+    /**
+     简单总结：（TODO 后续仔细分析）
+     检测 <dubbo:service> 标签的 interface 属性合法性，不合法则抛出异常
+     检测 ProviderConfig、ApplicationConfig 等核心配置类对象是否为空，若为空，则尝试从其他配置类对象中获取相应的实例。
+     检测并处理泛化服务和普通服务类
+     检测本地存根配置，并进行相应的处理
+     对 ApplicationConfig、RegistryConfig 等配置类进行检测，为空则尝试创建，若无法创建则抛出异常
+     */
     public void checkAndUpdateSubConfigs() {
         // Use default configs defined explicitly on global configs
         completeCompoundConfigs();	// 初始化默认配置
@@ -369,19 +377,23 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
     	// 检查并更新一些配置
         checkAndUpdateSubConfigs();
 
+        // 如果Export为false，则不导出服务，一般用于本地测试时不希望本地启动的服务暴露出去给别人
         if (!shouldExport()) {
             return;
         }
 
+        // 是否延时导出
         if (shouldDelay()) {
+            // 延时导出服务
             DELAY_EXPORT_EXECUTOR.schedule(this::doExport, getDelay(), TimeUnit.MILLISECONDS);
         } else {
+            // 立刻执行导出
             doExport();
         }
     }
 
     private boolean shouldExport() {
-        Boolean export = getExport();
+        Boolean export = getExport();   // <dubbo:provider export="false" />
         // default value is true
         return export == null ? true : export;
     }
@@ -408,11 +420,12 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         if (exported) {
             return;
         }
-        exported = true;
+        exported = true;    // 是否已导出置为true
 
         if (StringUtils.isEmpty(path)) {
-            path = interfaceName;
+            path = interfaceName;   // path值默认为服务接口名
         }
+
         doExportUrls();
     }
 
@@ -450,17 +463,25 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void doExportUrls() {
+        // 加载注册中心链接。  简单理解就是RegistryConfig 转换 成URL
         List<URL> registryURLs = loadRegistries(true);
+        // 遍历所有协议，并在每个协议下导出服务
         for (ProtocolConfig protocolConfig : protocols) {
+
+            // TODO pathKey是什么东西？
             String pathKey = URL.buildKey(getContextPath(protocolConfig).map(p -> p + "/" + path).orElse(path), group, version);
             ProviderModel providerModel = new ProviderModel(pathKey, ref, interfaceClass);
-            ApplicationModel.initProviderModel(pathKey, providerModel);
+            ApplicationModel.initProviderModel(pathKey, providerModel); // 记录下已注册的提供者 TODO 有什么用？
+
+            // 用某个协议注册URL。根据配置，以及其他一些信息组装 UR
             doExportUrlsFor1Protocol(protocolConfig, registryURLs);
         }
     }
 
     private void doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List<URL> registryURLs) {
         String name = protocolConfig.getName();
+
+        // 如果协议名为空，或空串，则将协议名变量设置为 dubbo
         if (StringUtils.isEmpty(name)) {
             name = DUBBO;
         }
@@ -468,8 +489,9 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         Map<String, String> map = new HashMap<String, String>();
         map.put(SIDE_KEY, PROVIDER_SIDE);
 
-        appendRuntimeParameters(map);
-        appendParameters(map, metrics);
+        appendRuntimeParameters(map);   // 这在前面哪做过？
+
+        appendParameters(map, metrics); // TODO metrics是什么配置？ metrics为微服务的监控提供数据基础；是一个标准度量库，对监控对象的数据采集进行了统一封装。
         appendParameters(map, application);
         appendParameters(map, module);
         // remove 'default.' prefix for configs from ProviderConfig
@@ -477,40 +499,63 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         appendParameters(map, provider);
         appendParameters(map, protocolConfig);
         appendParameters(map, this);
+
+        // FIXME 方法配置的处理 MethodConfig    TODO 重载方法处理是不是有问题
+        // 检测 <dubbo:method> 标签中的配置信息，并将相关配置添加到 map 中
+        // methods 为 MethodConfig 集合，MethodConfig 中存储了 <dubbo:method> 标签的配置信息
         if (CollectionUtils.isNotEmpty(methods)) {
             for (MethodConfig method : methods) {
+                // 添加 MethodConfig 对象的字段信息到 map 中，键 = 方法名.属性名。
+                // 比如存储 <dubbo:method name="sayHello" retries="2"> 对应的 MethodConfig，
+                // 键 = sayHello.retries，map = {"sayHello.retries": 2, "xxx": "yyy"}
                 appendParameters(map, method, method.getName());
+
+                // retry=false 转化成 retries=0
                 String retryKey = method.getName() + ".retry";
                 if (map.containsKey(retryKey)) {
                     String retryValue = map.remove(retryKey);
+                    // 检测 MethodConfig retry 是否为 false，若是，则设置重试次数为0
                     if ("false".equals(retryValue)) {
                         map.put(method.getName() + ".retries", "0");
                     }
                 }
+
+                // FIXME 方法参数配置处理  ArgumentConfig
                 List<ArgumentConfig> arguments = method.getArguments();
                 if (CollectionUtils.isNotEmpty(arguments)) {
                     for (ArgumentConfig argument : arguments) {
-                        // convert argument type
+                        // 转换参数类型
+                        // 检测 type 属性是否为空，或者空串
                         if (argument.getType() != null && argument.getType().length() > 0) {
+                            // （FIXME 分支1 ⭐️）  指定了参数类型
+                            // 获取目标接口方法列表（对比方法参数配置进行校验）
                             Method[] methods = interfaceClass.getMethods();
                             // visit all methods
                             if (methods != null && methods.length > 0) {
                                 for (int i = 0; i < methods.length; i++) {
                                     String methodName = methods[i].getName();
                                     // target the method, and get its signature
+                                    // 对比方法名，查找目标方法
                                     if (methodName.equals(method.getName())) {
                                         Class<?>[] argtypes = methods[i].getParameterTypes();
                                         // one callback in the method
                                         if (argument.getIndex() != -1) {
+                                            // 检测 ArgumentConfig 中的 type 属性与方法参数列表中的参数名称是否一致，不一致则抛出异常
+                                            // (FIXME 分支2 ⭐️)
                                             if (argtypes[argument.getIndex()].getName().equals(argument.getType())) {
+                                                // 添加 ArgumentConfig 字段信息到 map 中，
+                                                // 键前缀 = 方法名.index，比如:
+                                                // map = {"sayHello.3": true}
                                                 appendParameters(map, argument, method.getName() + "." + argument.getIndex());
                                             } else {
                                                 throw new IllegalArgumentException("Argument config error : the index attribute and type attribute not match :index :" + argument.getIndex() + ", type:" + argument.getType());
                                             }
                                         } else {
+                                            // FIXME 分支3 ⭐️
                                             // multiple callbacks in the method
                                             for (int j = 0; j < argtypes.length; j++) {
                                                 Class<?> argclazz = argtypes[j];
+                                                // 从参数类型列表中查找类型名称为 argument.type 的参数
                                                 if (argclazz.getName().equals(argument.getType())) {
                                                     appendParameters(map, argument, method.getName() + "." + j);
                                                     if (argument.getIndex() != -1 && argument.getIndex() != j) {
@@ -523,6 +568,7 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                                 }
                             }
                         } else if (argument.getIndex() != -1) {
+                            // FIXME 分支4 ⭐️  没指定参数类型，但指定了index
                             appendParameters(map, argument, method.getName() + "." + argument.getIndex());
                         } else {
                             throw new IllegalArgumentException("Argument config must set index or type attribute.eg: <dubbo:argument index='0' .../> or <dubbo:argument type=xxx .../>");
@@ -533,6 +579,7 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
             } // end of methods for
         }
 
+        // 检测 generic 是否为 "true"，并根据检测结果向 map 中添加不同的信息。 TODO generic是什么意思？
         if (ProtocolUtils.isGeneric(generic)) {
             map.put(GENERIC_KEY, generic);
             map.put(METHODS_KEY, ANY_VALUE);
@@ -542,25 +589,48 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                 map.put(REVISION_KEY, revision);
             }
 
+            // 为接口生成包裹类 Wrapper，Wrapper 中包含了接口的详细信息，比如接口方法名数组，字段信息等
+            // TODO 这个包装类有什么用，这里的methods是包装类中的方法？
             String[] methods = Wrapper.getWrapper(interfaceClass).getMethodNames();
+
+            // 添加方法名到 map 中，如果包含多个方法名，则用逗号隔开，比如 method = init,destroy
             if (methods.length == 0) {
                 logger.warn("No method found in service interface " + interfaceClass.getName());
                 map.put(METHODS_KEY, ANY_VALUE);
             } else {
+                // 将逗号作为分隔符连接方法名，并将连接后的字符串放入 map 中
                 map.put(METHODS_KEY, StringUtils.join(new HashSet<String>(Arrays.asList(methods)), ","));
             }
         }
+
+        // 添加 token 到 map 中
+        // TODO token 是什么了？
         if (!ConfigUtils.isEmpty(token)) {
             if (ConfigUtils.isDefault(token)) {
+                // 随机生成 token
                 map.put(TOKEN_KEY, UUID.randomUUID().toString());
             } else {
                 map.put(TOKEN_KEY, token);
             }
         }
+
+
         // export service
+        // 获取 host 和 port
         String host = this.findConfigedHosts(protocolConfig, registryURLs, map);
         Integer port = this.findConfigedPorts(protocolConfig, name, map);
-        URL url = new URL(name, host, port, getContextPath(protocolConfig).map(p -> p + "/" + path).orElse(path), map);
+
+        // 组装 URL    org.apache.dubbo.common.URL
+        URL url = new URL(
+                name,
+                host,
+                port,
+                // 上下文路径 + path     方法路径
+                getContextPath(protocolConfig).map(p -> p + "/" + path).orElse(path),
+                map);
+
+        // ===至此，重要的URL组装完毕====
+
 
         if (ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
                 .hasExtension(url.getProtocol())) {
