@@ -106,6 +106,7 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
     }
 
     @Override
+    // Spring 上下文刷新事件触发，事件响应方法 TODO 该事件怎么触发的？频次如何？
     public void onApplicationEvent(ContextRefreshedEvent event) {
         // 是否已导出 && 是否已取消导出 TODO 这两个值从哪来的？
         if (!isExported() && !isUnexported()) {
