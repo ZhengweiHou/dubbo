@@ -78,7 +78,17 @@ public abstract class AbstractProxyInvoker<T> implements Invoker<T> {
     public void destroy() {
     }
 
+    private CompletableFuture<Object> wrapWithFuture (Object value, Invocation invocation) {
+        if (RpcContext.getContext().isAsyncStarted()) {
+            return ((AsyncContextImpl)(RpcContext.getContext().getAsyncContext())).getInternalFuture();
+        } else if (value instanceof CompletableFuture) {
+            return (CompletableFuture<Object>) value;
+        }
+        return CompletableFuture.completedFuture(value);
+    }
+
     @Override
+    // TODO 参数invocation从哪来
     public Result invoke(Invocation invocation) throws RpcException {
         try {
             Object value = doInvoke(proxy, invocation.getMethodName(), invocation.getParameterTypes(), invocation.getArguments());
@@ -106,15 +116,6 @@ public abstract class AbstractProxyInvoker<T> implements Invoker<T> {
         } catch (Throwable e) {
             throw new RpcException("Failed to invoke remote proxy method " + invocation.getMethodName() + " to " + getUrl() + ", cause: " + e.getMessage(), e);
         }
-    }
-
-    private CompletableFuture<Object> wrapWithFuture (Object value, Invocation invocation) {
-        if (RpcContext.getContext().isAsyncStarted()) {
-            return ((AsyncContextImpl)(RpcContext.getContext().getAsyncContext())).getInternalFuture();
-        } else if (value instanceof CompletableFuture) {
-            return (CompletableFuture<Object>) value;
-        }
-        return CompletableFuture.completedFuture(value);
     }
 
     protected abstract Object doInvoke(T proxy, String methodName, Class<?>[] parameterTypes, Object[] arguments) throws Throwable;

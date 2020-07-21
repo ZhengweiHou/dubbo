@@ -337,6 +337,7 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
     public void export() {
         super.export();
         // Publish ServiceBeanExportedEvent
+        // spring的监听事件？？？
         publishExportEvent();
     }
 
@@ -351,6 +352,7 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
      */
     private void publishExportEvent() {
         ServiceBeanExportedEvent exportEvent = new ServiceBeanExportedEvent(this);
+        // spring的监听事件？？？
         applicationEventPublisher.publishEvent(exportEvent);
     }
 

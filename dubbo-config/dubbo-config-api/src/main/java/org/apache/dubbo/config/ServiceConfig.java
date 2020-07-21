@@ -629,9 +629,37 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                 getContextPath(protocolConfig).map(p -> p + "/" + path).orElse(path),
                 map);
 
-        // ===至此，重要的URL组装完毕====
+        // ===至此，URL主要内容组装完毕====
+        /** URL eg:
+        dubbo://xxx.xxx.xxx.xxx:20881/com.hzw.learn.springboot.dubbo.hello.provider.Hi
+                ?anyhost=true
+                &application=provider_api
+                &bind.ip=10.252.12.24
+                &bind.port=20881
+                &deprecated=false
+                &dubbo=2.0.2
+                &dubbo.tag=xxx
+                &dynamic=true
+                &generic=false
+                &group=2222
+                &interface=com.hzw.learn.springboot.dubbo.hello.provider.Hi
+                &loadbalance=roundrobin
+                &methods=async_sayhi,sayhi
+                &pid=139888
+                &qos.accept.foreign.ip=false
+                &register=true
+                &release=
+                &revision=1.0.0
+                &side=provider
+                &telnet=cd,ps,select,log,ls,clear,count,invoke,exit,help,trace,pwd,shutdown,status
+                &timestamp=1595294798037
+                &version=1.0.0
+         */
 
 
+
+        // ====================导出Dubbo服务=========================
+        // 若存在目标protocol的配置工厂扩展，则通过该工厂扩展生产出protocal对应的configuretor，并以url为参数调用配置方法 TODO 这能用来干啥呢？
         if (ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
                 .hasExtension(url.getProtocol())) {
             url = ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
@@ -639,63 +667,156 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         }
 
         String scope = url.getParameter(SCOPE_KEY);
-        // don't export when none is configured
-        if (!SCOPE_NONE.equalsIgnoreCase(scope)) {
 
-            // export to local if the config is not remote (export to remote only when config is remote)
-            if (!SCOPE_REMOTE.equalsIgnoreCase(scope)) {
+//        // don't export when none is configured
+//        if (!SCOPE_NONE.equalsIgnoreCase(scope)) {
+//
+//            // export to local if the config is not remote (export to remote only when config is remote)
+//            if (!SCOPE_REMOTE.equalsIgnoreCase(scope)) {
+//                exportLocal(url);
+//            }
+//            // export to remote if the config is not local (export to local only when config is local)
+//            if (!SCOPE_LOCAL.equalsIgnoreCase(scope)) {
+//                if (!isOnlyInJvm() && logger.isInfoEnabled()) {
+//                    logger.info("Export dubbo service " + interfaceClass.getName() + " to url " + url);
+//                }
+//                if (CollectionUtils.isNotEmpty(registryURLs)) {
+//                    for (URL registryURL : registryURLs) {
+//                        //if protocol is only injvm ,not register
+//                        if (LOCAL_PROTOCOL.equalsIgnoreCase(url.getProtocol())) {
+//                            continue;
+//                        }
+//                        url = url.addParameterIfAbsent(DYNAMIC_KEY, registryURL.getParameter(DYNAMIC_KEY));
+//                        URL monitorUrl = loadMonitor(registryURL);
+//                        if (monitorUrl != null) {
+//                            url = url.addParameterAndEncoded(MONITOR_KEY, monitorUrl.toFullString());
+//                        }
+//                        if (logger.isInfoEnabled()) {
+//                            logger.info("Register dubbo service " + interfaceClass.getName() + " url " + url + " to registry " + registryURL);
+//                        }
+//
+//                        // For providers, this is used to enable custom proxy to generate invoker
+//                        String proxy = url.getParameter(PROXY_KEY);
+//                        if (StringUtils.isNotEmpty(proxy)) {
+//                            registryURL = registryURL.addParameter(PROXY_KEY, proxy);
+//                        }
+//
+//                        Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString()));
+//                        DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
+//
+//                        Exporter<?> exporter = protocol.export(wrapperInvoker);
+//                        exporters.add(exporter);
+//                    }
+//                } else {
+//                    Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, url);
+//                    DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
+//
+//                    Exporter<?> exporter = protocol.export(wrapperInvoker);
+//                    exporters.add(exporter);
+//                }
+//                /**
+//                 * @since 2.7.0
+//                 * ServiceData Store
+//                 */
+//                MetadataReportService metadataReportService = null;
+//                if ((metadataReportService = getMetadataReportService()) != null) {
+//                    metadataReportService.publishProvider(url);
+//                }
+//            }
+//        }
+
+        // refact up
+        if (SCOPE_NONE.equalsIgnoreCase(scope)){
+            // do nothing
+        }else{
+            if(SCOPE_LOCAL.equalsIgnoreCase(scope)){
+                // 导出到本地
                 exportLocal(url);
             }
-            // export to remote if the config is not local (export to local only when config is local)
-            if (!SCOPE_LOCAL.equalsIgnoreCase(scope)) {
-                if (!isOnlyInJvm() && logger.isInfoEnabled()) {
-                    logger.info("Export dubbo service " + interfaceClass.getName() + " to url " + url);
-                }
-                if (CollectionUtils.isNotEmpty(registryURLs)) {
-                    for (URL registryURL : registryURLs) {
-                        //if protocol is only injvm ,not register
-                        if (LOCAL_PROTOCOL.equalsIgnoreCase(url.getProtocol())) {
-                            continue;
-                        }
-                        url = url.addParameterIfAbsent(DYNAMIC_KEY, registryURL.getParameter(DYNAMIC_KEY));
-                        URL monitorUrl = loadMonitor(registryURL);
-                        if (monitorUrl != null) {
-                            url = url.addParameterAndEncoded(MONITOR_KEY, monitorUrl.toFullString());
-                        }
-                        if (logger.isInfoEnabled()) {
-                            logger.info("Register dubbo service " + interfaceClass.getName() + " url " + url + " to registry " + registryURL);
-                        }
-
-                        // For providers, this is used to enable custom proxy to generate invoker
-                        String proxy = url.getParameter(PROXY_KEY);
-                        if (StringUtils.isNotEmpty(proxy)) {
-                            registryURL = registryURL.addParameter(PROXY_KEY, proxy);
-                        }
-
-                        Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString()));
-                        DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
-
-                        Exporter<?> exporter = protocol.export(wrapperInvoker);
-                        exporters.add(exporter);
-                    }
-                } else {
-                    Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, url);
-                    DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
-
-                    Exporter<?> exporter = protocol.export(wrapperInvoker);
-                    exporters.add(exporter);
-                }
-                /**
-                 * @since 2.7.0
-                 * ServiceData Store
-                 */
-                MetadataReportService metadataReportService = null;
-                if ((metadataReportService = getMetadataReportService()) != null) {
-                    metadataReportService.publishProvider(url);
-                }
+            if(SCOPE_REMOTE.equalsIgnoreCase(scope)){
+                // 导出到远程
+                // refact by hzw
+                url = exportRemote(registryURLs, url);
             }
         }
+
         this.urls.add(url);
+    }
+
+    // refact by hzw
+    private URL exportRemote(List<URL> registryURLs, URL url) {
+        if (!isOnlyInJvm() && logger.isInfoEnabled()) {
+            logger.info("Export dubbo service " + interfaceClass.getName() + " to url " + url);
+        }
+        if (CollectionUtils.isNotEmpty(registryURLs)) {
+            for (URL registryURL : registryURLs) {
+                // 遍历注册中心URL列表
+
+                //if protocol is only injvm ,not register
+                if (LOCAL_PROTOCOL.equalsIgnoreCase(url.getProtocol())) {
+                    // protocal=injvm 则不进行注册 TODO　为什么这个判断不移到循环体外
+                    continue;
+                }
+                url = url.addParameterIfAbsent(DYNAMIC_KEY, registryURL.getParameter(DYNAMIC_KEY));
+
+                // 加载监视器链接
+                URL monitorUrl = loadMonitor(registryURL);
+                if (monitorUrl != null) {
+                    // 将监视器链接作为参数加入到url中
+                    url = url.addParameterAndEncoded(MONITOR_KEY, monitorUrl.toFullString());
+                }
+
+
+                if (logger.isInfoEnabled()) {
+                    logger.info("Register dubbo service " + interfaceClass.getName() + " url " + url + " to registry " + registryURL);
+                }
+
+                // For providers, this is used to enable custom proxy to generate invoker
+                // 配置了proxy，启用自定义代理来生成调用程序 TODO 怎么使用呢？
+                String proxy = url.getParameter(PROXY_KEY);
+                if (StringUtils.isNotEmpty(proxy)) {
+                    registryURL = registryURL.addParameter(PROXY_KEY, proxy);
+                }
+
+
+                /*
+                FIXME 什么是Invoker ？
+                Invoker 是实体域，它是 Dubbo 的核心模型，其它模型都向它靠扰，
+                或转换成它，它代表一个可执行体，可向它发起 invoke 调用，它有可能
+                是一个本地的实现，也可能是一个远程的实现，也可能一个集群实现。
+                */
+                // 为服务提供实现类（ref）生成Invoker
+                /**这里的PROXY_FACTORY是ProxyFactory.class的自适应扩展，其默认实现是JavassistProxyFactory
+                 * @see org.apache.dubbo.rpc.proxy.javassist.JavassistProxyFactory
+                 */
+                Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString())); // registryURL.export = url
+
+                // 委托提供者元数据调用者 用于持有 Invoker 和 ServiceConfig
+                DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
+
+                // 导出服务，并生成 Export
+                Exporter<?> exporter = protocol.export(wrapperInvoker);
+                exporters.add(exporter);
+            }
+        } else {
+            Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, url);
+            DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
+
+            Exporter<?> exporter = protocol.export(wrapperInvoker);
+            exporters.add(exporter);
+        }
+
+
+
+        /**
+         * @since 2.7.0
+         * ServiceData Store
+         */
+        MetadataReportService metadataReportService = null;
+        if ((metadataReportService = getMetadataReportService()) != null) {
+            metadataReportService.publishProvider(url);
+        }
+        return url;
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

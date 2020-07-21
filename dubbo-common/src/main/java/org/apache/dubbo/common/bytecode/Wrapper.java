@@ -114,15 +114,18 @@ public abstract class Wrapper {
             return OBJECT_WRAPPER;
         }
 
+        // 从缓存中获取 Wrapper 实例
         Wrapper ret = WRAPPER_MAP.get(c);
         if (ret == null) {
-            // 构造包装类
+            // 缓存未命中，构造包装类
             ret = makeWrapper(c);
+            // 写入缓存
             WRAPPER_MAP.put(c, ret);
         }
         return ret;
     }
 
+    // FIXME 这里生成的wrapper长什么样？
     private static Wrapper makeWrapper(Class<?> c) {
         if (c.isPrimitive()) {
             throw new IllegalArgumentException("Can not create wrapper for primitive type: " + c);
@@ -261,6 +264,7 @@ public abstract class Wrapper {
         cc.addMethod(c3.toString());
 
         try {
+
             Class<?> wc = cc.toClass();
             // setup static field.
             wc.getField("pts").set(null, pts);
