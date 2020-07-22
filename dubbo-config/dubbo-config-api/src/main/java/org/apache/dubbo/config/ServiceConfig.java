@@ -579,7 +579,7 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
             } // end of methods for
         }
 
-        // 检测 generic 是否为 "true"，并根据检测结果向 map 中添加不同的信息。 TODO generic是什么意思？
+        // 检测 generic 是否为 "true"，并根据检测结果向 map 中添加不同的信息。 TODO generic是什么意思？通用的？
         if (ProtocolUtils.isGeneric(generic)) {
             map.put(GENERIC_KEY, generic);
             map.put(METHODS_KEY, ANY_VALUE);
@@ -666,9 +666,11 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                     .getExtension(url.getProtocol()).getConfigurator(url).configure(url);
         }
 
+        // TODO 这个SCOPE的值是从哪来的
         String scope = url.getParameter(SCOPE_KEY);
 
-//        // don't export when none is configured
+//        这段代码是源码的原始逻辑
+//        don't export when none is configured
 //        if (!SCOPE_NONE.equalsIgnoreCase(scope)) {
 //
 //            // export to local if the config is not remote (export to remote only when config is remote)
@@ -726,19 +728,35 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
 //        }
 
         // refact up
-        if (SCOPE_NONE.equalsIgnoreCase(scope)){
-            // do nothing
-        }else{
-            if(SCOPE_LOCAL.equalsIgnoreCase(scope)){
+               // don't export when none is configured
+        if (!SCOPE_NONE.equalsIgnoreCase(scope)) {
+            // export to local if the config is not remote (export to remote only when config is remote)
+            if (!SCOPE_REMOTE.equalsIgnoreCase(scope)) {
                 // 导出到本地
                 exportLocal(url);
             }
-            if(SCOPE_REMOTE.equalsIgnoreCase(scope)){
+            // export to remote if the config is not local (export to local only when config is local)
+            if (!SCOPE_LOCAL.equalsIgnoreCase(scope)) {
                 // 导出到远程
                 // refact by hzw
                 url = exportRemote(registryURLs, url);
             }
         }
+
+        // FIXME 不能如下重构，原逻辑若scope为null则同时注册local和remote，当且仅当scope=none时不进行任何导出。下列逻辑不对
+//        if (SCOPE_NONE.equalsIgnoreCase(scope)){
+//            // do nothing
+//        }else{
+//            if(SCOPE_LOCAL.equalsIgnoreCase(scope)){
+//                // 导出到本地
+//                exportLocal(url);
+//            }
+//            if(SCOPE_REMOTE.equalsIgnoreCase(scope)){
+//                // 导出到远程
+//                // refact by hzw
+//                url = exportRemote(registryURLs, url);
+//            }
+//        }
 
         this.urls.add(url);
     }
@@ -795,10 +813,18 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                 DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
 
                 // 导出服务，并生成 Export
+                // FIXME 怎么实现不同的protocol调用不同的导出扩展类？
+                //  注意这里的protocol是一个自适应扩展，真正实现类会通过invoker中的url中的protocol参数值作为扩展类name去获取扩展
+                /**
+                 * 这里的protocol会自适应调用
+                 * @see org.apache.dubbo.registry.integration.RegistryProtocol
+                 */
+                // url.protocol:registry=org.apache.dubbo.registry.integration.RegistryProtocol
                 Exporter<?> exporter = protocol.export(wrapperInvoker);
                 exporters.add(exporter);
             }
         } else {
+            // TODO 若没有配置注册中心，这里是导出到哪？
             Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, url);
             DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
 
@@ -825,10 +851,16 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
      */
     private void exportLocal(URL url) {
         URL local = URLBuilder.from(url)
-                .setProtocol(LOCAL_PROTOCOL)
+                .setProtocol(LOCAL_PROTOCOL)  // 设置协议头为 injvm
                 .setHost(LOCALHOST_VALUE)
                 .setPort(0)
                 .build();
+
+        // 创建invoker 并通过protocol导出服务。FIXME 注意这里的protocol是一个自适应扩展，真正实现类会通过invoker中的url中的protocol参数值作为扩展类name去获取扩展
+        /**
+         * 这里的protocol会自适应调用
+         * @see org.apache.dubbo.rpc.protocol.injvm.InjvmProtocol
+         */
         Exporter<?> exporter = protocol.export(
                 PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, local));
         exporters.add(exporter);
