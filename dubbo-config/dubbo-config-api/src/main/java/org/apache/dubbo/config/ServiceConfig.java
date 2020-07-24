@@ -819,7 +819,7 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                  * 这里的protocol会自适应调用
                  * @see org.apache.dubbo.registry.integration.RegistryProtocol
                  */
-                // url.protocol:registry=org.apache.dubbo.registry.integration.RegistryProtocol
+                // url.protocol  ==>  registry=org.apache.dubbo.registry.integration.RegistryProtocol
                 Exporter<?> exporter = protocol.export(wrapperInvoker);
                 exporters.add(exporter);
             }
@@ -858,7 +858,7 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
 
         // 创建invoker 并通过protocol导出服务。FIXME 注意这里的protocol是一个自适应扩展，真正实现类会通过invoker中的url中的protocol参数值作为扩展类name去获取扩展
         /**
-         * 这里的protocol会自适应调用
+         * 这里的protocol会自适应调用 (FIXME 同级对比DubboProtocol的export动作)
          * @see org.apache.dubbo.rpc.protocol.injvm.InjvmProtocol
          */
         Exporter<?> exporter = protocol.export(

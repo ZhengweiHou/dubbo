@@ -93,14 +93,17 @@ public abstract class AbstractRegistryFactory implements RegistryFactory {
                 .build();
         String key = url.toServiceStringWithoutResolving();
         // Lock the registry access process to ensure a single instance of the registry
-        LOCK.lock();
+        LOCK.lock();    // 加锁，保证registry是单例
         try {
             Registry registry = REGISTRIES.get(key);
             if (registry != null) {
                 return registry;
             }
             //create registry by spi/ioc
-            registry = createRegistry(url);
+            // 缓存中没有，则创建，看是通过SPI还是IOC，取决于工厂类的具体实现，例如
+            /** @see  org.apache.dubbo.registry.zookeeper.ZookeeperRegistryFactory#createRegistry(URL) */
+
+            registry = createRegistry(url);     // FIXME **创建registry**
             if (registry == null) {
                 throw new IllegalStateException("Can not create registry " + url);
             }

@@ -31,6 +31,7 @@ import org.apache.dubbo.registry.NotifyListener;
 import org.apache.dubbo.registry.Registry;
 import org.apache.dubbo.registry.RegistryFactory;
 import org.apache.dubbo.registry.RegistryService;
+import org.apache.dubbo.registry.support.AbstractRegistryFactory;
 import org.apache.dubbo.registry.support.ProviderConsumerRegTable;
 import org.apache.dubbo.registry.support.ProviderInvokerWrapper;
 import org.apache.dubbo.rpc.Exporter;
@@ -182,6 +183,11 @@ public class RegistryProtocol implements Protocol {
 
     public void register(URL registryUrl, URL registeredProviderUrl) {
         Registry registry = registryFactory.getRegistry(registryUrl);
+        /** 例如
+         * @see org.apache.dubbo.registry.support.FailbackRegistry#register(URL)
+         * =>
+         * @see org.apache.dubbo.registry.zookeeper.ZookeeperRegistry#doRegister(URL)
+         */
         registry.register(registeredProviderUrl);
     }
 
@@ -192,40 +198,72 @@ public class RegistryProtocol implements Protocol {
 
     @Override
     public <T> Exporter<T> export(final Invoker<T> originInvoker) throws RpcException {
+        // 获取注册中心 URL，以 zookeeper 注册中心为例，得到的示例 URL 如下：
+        // zookeeper://127.0.0.1:2181/org.apache.dubbo.registry.RegistryService?
+        // application=provider_api
+        // &dubbo=2.0.2
+        // &export=dubbo%3A%2F%2F10.252.12.30%3A20881%2Fcom.hzw.learn.springboot.dubbo.hello.provider.Hi%3Fanyhost%3Dtrue%26application%3Dprovider_api%26bind.ip%3D10.252.12.30%26bind.port%3D20881%26deprecated%3Dfalse%26dubbo%3D2.0.2%26dubbo.tag%3Dxxx%26dynamic%3Dtrue%26generic%3Dfalse%26group%3D2222%26interface%3Dcom.hzw.learn.springboot.dubbo.hello.provider.Hi%26loadbalance%3Droundrobin%26methods%3Dasync_sayhi%2Csayhi%26pid%3D544981%26qos.accept.foreign.ip%3Dfalse%26register%3Dtrue%26release%3D2.7.3-hzwtest%26revision%3D1.0.0%26side%3Dprovider%26telnet%3Dcd%2Cps%2Cselect%2Clog%2Cls%2Cclear%2Ccount%2Cinvoke%2Cexit%2Chelp%2Ctrace%2Cpwd%2Cshutdown%2Cstatus%26timestamp%3D1595558006783%26version%3D1.0.0
+        // &group=dubbo
+        // &pid=544981
+        // &qos.accept.foreign.ip=false
+        // &release=2.7.3-hzwtest
+        // &timestamp=1595558006777
         URL registryUrl = getRegistryUrl(originInvoker);
-        // url to export locally
+
+        // 获取invoker持有的url中export对应的url（就对应上面registryUrl中的export）,例如：
+        // dubbo://10.252.12.30:20881/com.hzw.learn.springboot.dubbo.hello.provider.Hi?anyhost=true&application=provider_api&bind.ip=10.252.12.30&bind.port=20881&deprecated=false&dubbo=2.0.2&dubbo.tag=xxx&dynamic=true&generic=false&group=2222&interface=com.hzw.learn.springboot.dubbo.hello.provider.Hi&loadbalance=roundrobin&methods=async_sayhi,sayhi&pid=544981&qos.accept.foreign.ip=false&register=true&release=2.7.3-hzwtest&revision=1.0.0&side=provider&telnet=cd,ps,select,log,ls,clear,count,invoke,exit,help,trace,pwd,shutdown,status&timestamp=1595558006783&version=1.0.0
         URL providerUrl = getProviderUrl(originInvoker);
+
 
         // Subscribe the override data
         // FIXME When the provider subscribes, it will affect the scene : a certain JVM exposes the service and call
         //  the same service. Because the subscribed is cached key with the name of the service, it causes the
         //  subscription information to cover.
+        // TODO 订阅替换数据？？？这是干什用的？？向注册中心进行订阅 override 数据??================================
+        // 获取订阅 URL ，比如：
+        // provider://10.252.12.30:20881/com.hzw.learn.springboot.dubbo.hello.provider.Hi?anyhost=true&application=provider_api&bind.ip=10.252.12.30&bind.port=20881&category=configurators&check=false&deprecated=false&dubbo=2.0.2&dubbo.tag=xxx&dynamic=true&generic=false&group=2222&interface=com.hzw.learn.springboot.dubbo.hello.provider.Hi&loadbalance=roundrobin&methods=async_sayhi,sayhi&pid=584290&qos.accept.foreign.ip=false&register=true&release=2.7.3-hzwtest&revision=1.0.0&side=provider&telnet=cd,ps,select,log,ls,clear,count,invoke,exit,help,trace,pwd,shutdown,status&timestamp=1595570910355&version=1.0.0
         final URL overrideSubscribeUrl = getSubscribedOverrideUrl(providerUrl);
         final OverrideListener overrideSubscribeListener = new OverrideListener(overrideSubscribeUrl, originInvoker);
         overrideListeners.put(overrideSubscribeUrl, overrideSubscribeListener);
 
+        // TODO 通过订阅覆盖providerUrl配置？？
+        // dubbo://10.252.12.30:20881/com.hzw.learn.springboot.dubbo.hello.provider.Hi?anyhost=true&application=provider_api&bind.ip=10.252.12.30&bind.port=20881&deprecated=false&dubbo=2.0.2&dubbo.tag=xxx&dynamic=true&generic=false&group=2222&interface=com.hzw.learn.springboot.dubbo.hello.provider.Hi&loadbalance=roundrobin&methods=async_sayhi,sayhi&pid=584290&qos.accept.foreign.ip=false&register=true&release=2.7.3-hzwtest&revision=1.0.0&side=provider&telnet=cd,ps,select,log,ls,clear,count,invoke,exit,help,trace,pwd,shutdown,status&timestamp=1595570910355&version=1.0.0
         providerUrl = overrideUrlWithConfig(providerUrl, overrideSubscribeListener);
-        //export invoker
-        final ExporterChangeableWrapper<T> exporter = doLocalExport(originInvoker, providerUrl);
+        // ==================================================================
 
-        // url to registry
-        final Registry registry = getRegistry(originInvoker);
+        //export invoker
+        // TODO 启动服务端（netty或其他，取决于扩展方式），（我理解的这是导出远程调用协议对应的服务端代理，和initJvm）
+        final ExporterChangeableWrapper<T> exporter = doLocalExport(originInvoker, providerUrl);    // FIXME **导出服务,启动netty或其他服务端，绑定处理等**
+
+        // 根据 URL 加载 Registry 实现类，比如 ZookeeperRegistry
+        final Registry registry = getRegistry(originInvoker);   // FIXME **创建注册中心，实际上就是通过注册中心客户端**
+
+        // 获取已注册的服务提供者 URL，比如：  TODO 这是从注册中心获取的吗？
+        // dubbo://10.252.12.30:20881/com.hzw.learn.springboot.dubbo.hello.provider.Hi?anyhost=true&application=provider_api&deprecated=false&dubbo=2.0.2&dubbo.tag=xxx&dynamic=true&generic=false&group=2222&interface=com.hzw.learn.springboot.dubbo.hello.provider.Hi&loadbalance=roundrobin&methods=async_sayhi,sayhi&pid=544981&register=true&release=2.7.3-hzwtest&revision=1.0.0&side=provider&telnet=cd,ps,select,log,ls,clear,count,invoke,exit,help,trace,pwd,shutdown,status&timestamp=1595558006783&version=1.0.0
         final URL registeredProviderUrl = getRegisteredProviderUrl(providerUrl, registryUrl);
+
+
+        // 向服务提供者与消费者注册表中注册服务提供者
         ProviderInvokerWrapper<T> providerInvokerWrapper = ProviderConsumerRegTable.registerProvider(originInvoker,
                 registryUrl, registeredProviderUrl);
+
         //to judge if we need to delay publish
+        // 获取 register 参数 （TODO 判断是否需要延迟发布？）
         boolean register = registeredProviderUrl.getParameter("register", true);
         if (register) {
-            register(registryUrl, registeredProviderUrl);
-            providerInvokerWrapper.setReg(true);
+            register(registryUrl, registeredProviderUrl);           // FIXME **注册服务**   对于zookeeper来说就是在registryUrl对应的zk上创建了一个registeredProviderUrl对应的文件夹
+            providerInvokerWrapper.setReg(true);    // 设置已注册标志为true
         }
 
         // Deprecated! Subscribe to override rules in 2.6.x or before.
+        // 向注册中心进行订阅 override 数据
         registry.subscribe(overrideSubscribeUrl, overrideSubscribeListener);
 
         exporter.setRegisterUrl(registeredProviderUrl);
         exporter.setSubscribeUrl(overrideSubscribeUrl);
+
         //Ensure that a new exporter instance is returned every time export
+        // 创建并返回 DestroyableExporter (可被破坏的导出？？)
         return new DestroyableExporter<>(exporter);
     }
 
@@ -240,8 +278,14 @@ public class RegistryProtocol implements Protocol {
     private <T> ExporterChangeableWrapper<T> doLocalExport(final Invoker<T> originInvoker, URL providerUrl) {
         String key = getCacheKey(originInvoker);
 
+        // 构建ExporterChangeableWrapper 添加到bounds（缓存）中，并返回  FIXME 注意这里的bounds 是 ConcurrentMap实现，所以没用synchronized来控制并发
         return (ExporterChangeableWrapper<T>) bounds.computeIfAbsent(key, s -> {
+            // 创建 Invoker 为委托类对象
             Invoker<?> invokerDelegate = new InvokerDelegate<>(originInvoker, providerUrl);
+            /**
+             * 调用 protocol 的 export 方法导出服务，这里的protocol会自适应调用  (FIXME 这个操作同级对比InjvmProtocol的导出动作)
+             * @see org.apache.dubbo.rpc.protocol.dubbo.DubboProtocol
+             */
             return new ExporterChangeableWrapper<>((Exporter<T>) protocol.export(invokerDelegate), originInvoker);
         });
     }
@@ -295,6 +339,10 @@ public class RegistryProtocol implements Protocol {
      */
     private Registry getRegistry(final Invoker<?> originInvoker) {
         URL registryUrl = getRegistryUrl(originInvoker);
+        /** 获取注册中心，没有则创建
+         *  @see AbstractRegistryFactory#getRegistry(URL)
+         *  注意：AbstractRegistryFactory是抽象类，真正的factory应该是具体实例如ZookeeperRegistryFactory
+         */
         return registryFactory.getRegistry(registryUrl);
     }
 

@@ -164,16 +164,24 @@ public abstract class AbstractZookeeperClient<TargetDataListener, TargetChildLis
 
     @Override
     public void create(String path, String content, boolean ephemeral) {
+        // 1. 删除全path对应子目录
         if (checkExists(path)) {
-            delete(path);
+            delete(path);   // TODO 删除全path对应节点(最里面的那个目录）
         }
+
+        // 2. 创建父目录（内为递归）
         int i = path.lastIndexOf('/');
         if (i > 0) {
-            create(path.substring(0, i), false);
+            // 调用另一个重载方法，实际上是创建目录
+            create(path.substring(0, i), false);    // FIXME 注意：这里的方法时另一个方法
         }
+
+        // 3. 创建完父目录，则创建最终子目录并将内容写入
         if (ephemeral) {
+            // 创建临时节点
             createEphemeral(path, content);
         } else {
+            // 创建持久节点
             createPersistent(path, content);
         }
     }

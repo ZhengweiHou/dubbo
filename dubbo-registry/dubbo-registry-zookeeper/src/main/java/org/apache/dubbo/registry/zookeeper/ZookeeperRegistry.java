@@ -77,14 +77,27 @@ public class ZookeeperRegistry extends FailbackRegistry {
         if (url.isAnyHost()) {
             throw new IllegalStateException("registry address == null");
         }
+        // 获取组名，默认为 dubbo
         String group = url.getParameter(GROUP_KEY, DEFAULT_ROOT);
         if (!group.startsWith(PATH_SEPARATOR)) {
+            // group = "/" + group
             group = PATH_SEPARATOR + group;
         }
         this.root = group;
-        zkClient = zookeeperTransporter.connect(url);
+
+        // 创建 Zookeeper 客户端，默认为 
+        /**
+         * @see org.apache.dubbo.remoting.zookeeper.support.AbstractZookeeperTransporter#connect(URL)
+         * =调用=>
+         * @see org.apache.dubbo.remoting.zookeeper.curator.CuratorZookeeperTransporter#createZookeeperClient(URL)
+         * 最终获得的对象是
+         * @see org.apache.dubbo.remoting.zookeeper.curator.CuratorZookeeperClient
+         */
+        zkClient = zookeeperTransporter.connect(url);   // FIXME 创建zkclient
+
+        // 添加状态监听器
         zkClient.addStateListener(state -> {
-            if (state == StateListener.RECONNECTED) {
+            if (state == StateListener.RECONNECTED) {   // 重连
                 try {
                     recover();
                 } catch (Exception e) {
@@ -112,7 +125,12 @@ public class ZookeeperRegistry extends FailbackRegistry {
     @Override
     public void doRegister(URL url) {
         try {
-            zkClient.create(toUrlPath(url), url.getParameter(DYNAMIC_KEY, true));
+            /** 例如
+             * @see org.apache.dubbo.remoting.zookeeper.curator.CuratorZookeeperClient#create(String, boolean)
+             * 还有一个重载方法，TODO 干嘛用的，第二个参数是内容？配置中心会用到？
+             * @see org.apache.dubbo.remoting.zookeeper.curator.CuratorZookeeperClient#create(String, String, boolean)
+             */
+            zkClient.create(toUrlPath(url), url.getParameter(DYNAMIC_KEY, true));   // 最后参数确定是否是临时节点
         } catch (Throwable e) {
             throw new RpcException("Failed to register " + url + " to zookeeper " + getUrl() + ", cause: " + e.getMessage(), e);
         }

@@ -283,11 +283,19 @@ public class DubboProtocol extends AbstractProtocol {
         URL url = invoker.getUrl();
 
         // export service.
+        // 获取服务标识，理解成服务坐标也行。由服务组名，服务名，服务版本号以及端口组成。比如：
+        // 2222/com.hzw.learn.springboot.dubbo.hello.provider.Hi:1.0.0:20881  或
+        // demoGroup/com.alibaba.dubbo.demo.DemoService:1.0.1:20880
         String key = serviceKey(url);
-        DubboExporter<T> exporter = new DubboExporter<T>(invoker, key, exporterMap);
+
+        // 创建DubboExporter   invoker -> exporter
+        DubboExporter<T> exporter = new DubboExporter<T>(invoker, key, exporterMap);    // FIXME **创建DubboExporter**
+
+        // 缓存exporter
         exporterMap.put(key, exporter);
 
         //export an stub service for dispatching event
+        // TODO 导出存根服务以调度事件，这又是干嘛的？
         Boolean isStubSupportEvent = url.getParameter(STUB_EVENT_KEY, DEFAULT_STUB_EVENT);
         Boolean isCallbackservice = url.getParameter(IS_CALLBACK_SERVICE, false);
         if (isStubSupportEvent && !isCallbackservice) {
@@ -299,11 +307,14 @@ public class DubboProtocol extends AbstractProtocol {
                 }
 
             } else {
+                // 消费者方导出存根服务以调度事件
                 stubServiceMethodsMap.put(url.getServiceKey(), stubServiceMethods);
             }
         }
 
-        openServer(url);
+        // 启动服务，启动服务端，若url中address已开启服务则会跳过
+        openServer(url);        // FIXME **启动服务**
+        // 优化序列化 TODO 这是干啥呢？
         optimizeSerialization(url);
 
         return exporter;
@@ -311,20 +322,29 @@ public class DubboProtocol extends AbstractProtocol {
 
     private void openServer(URL url) {
         // find server.
+        // 获取 host:port，并将其作为服务器实例的 key，用于标识当前的服务器实例
         String key = url.getAddress();
+
         //client can export a service which's only for server to invoke
+        // TODO 客户端可以导出仅用于服务器调用的服务。isserver 什么意思呀？
         boolean isServer = url.getParameter(IS_SERVER_KEY, true);
         if (isServer) {
+            // 访问缓存
             ExchangeServer server = serverMap.get(key);
+
+            // 又是一个双重检查锁
             if (server == null) {
                 synchronized (this) {
                     server = serverMap.get(key);
                     if (server == null) {
-                        serverMap.put(key, createServer(url));
+                        // 服务器不存在，则创建服务器实例，并放入缓存中
+                        serverMap.put(key, createServer(url));  // TODO 创建ExchangeServer
                     }
                 }
             } else {
                 // server supports reset, use together with override
+                // 服务器已创建，则根据 url 中的配置重置服务器
+                /** @see org.apache.dubbo.remoting.transport.AbstractServer#reset(URL) */
                 server.reset(url);
             }
         }
@@ -333,25 +353,35 @@ public class DubboProtocol extends AbstractProtocol {
     private ExchangeServer createServer(URL url) {
         url = URLBuilder.from(url)
                 // send readonly event when server closes, it's enabled by default
+                // 服务器关闭时发送只读事件，默认情况下启用
                 .addParameterIfAbsent(CHANNEL_READONLYEVENT_SENT_KEY, Boolean.TRUE.toString())
                 // enable heartbeat by default
+                // 心跳配置,若没配置设置默认值 60 * 1000  一分钟？
                 .addParameterIfAbsent(HEARTBEAT_KEY, String.valueOf(DEFAULT_HEARTBEAT))
+                // 添加编码解码器参数
                 .addParameter(CODEC_KEY, DubboCodec.NAME)
                 .build();
+
+
+        // 获取 server 参数，默认是netty   一个来源：ProtocolConfig.server字段
         String str = url.getParameter(SERVER_KEY, DEFAULT_REMOTING_SERVER);
 
+        // 通过 SPI 检测是否存在 server 参数所代表的 Transporter 拓展，不存在则抛出异常
         if (str != null && str.length() > 0 && !ExtensionLoader.getExtensionLoader(Transporter.class).hasExtension(str)) {
             throw new RpcException("Unsupported server type: " + str + ", url: " + url);
         }
 
         ExchangeServer server;
         try {
-            server = Exchangers.bind(url, requestHandler);
+            // 创建ExchangeServer  FIXME requestHandler对应url请求的处理
+            server = Exchangers.bind(url, requestHandler);  // FIXME **启动服务端，并绑定处理类**   一堆适配、自适应后，最终获得一个Nettyserver对象
         } catch (RemotingException e) {
             throw new RpcException("Fail to start server(url: " + url + ") " + e.getMessage(), e);
         }
 
-        str = url.getParameter(CLIENT_KEY);
+        // 获取 client 参数，可指定 netty，mina
+        str = url.getParameter(CLIENT_KEY);             // TODO 这里的 client 参数有什么用？和上面的 server 参数有什么关系？
+        // 通过 SPI 检测是否存在 client 参数所代表的 Transporter 拓展，不存在则抛出异常
         if (str != null && str.length() > 0) {
             Set<String> supportedTypes = ExtensionLoader.getExtensionLoader(Transporter.class).getSupportedExtensions();
             if (!supportedTypes.contains(str)) {
