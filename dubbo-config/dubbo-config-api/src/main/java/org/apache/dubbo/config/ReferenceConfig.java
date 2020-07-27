@@ -34,6 +34,7 @@ import org.apache.dubbo.rpc.Invoker;
 import org.apache.dubbo.rpc.Protocol;
 import org.apache.dubbo.rpc.ProxyFactory;
 import org.apache.dubbo.rpc.cluster.Cluster;
+import org.apache.dubbo.rpc.cluster.Directory;
 import org.apache.dubbo.rpc.cluster.directory.StaticDirectory;
 import org.apache.dubbo.rpc.cluster.support.ClusterUtils;
 import org.apache.dubbo.rpc.cluster.support.RegistryAwareCluster;
@@ -270,7 +271,7 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
         // 检测ref是否为空，为空则通过init方法创建
         if (ref == null) {
         	// init方法主要用于处理配置，以及调用createProxy生成代理类
-            init();
+            init();     // FIXME **init**
         }
         return ref;
     }
@@ -299,20 +300,22 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
         }
         
         // 检查是否有local或者stub方法，有则寻找并加载interface+Local(Stub)
-        // 然后验证Stub/Local类与interface类
+        // 然后验证Stub/Local类与interface类   TODO 这是干嘛的？
         checkStubAndLocal(interfaceClass);
         
         // 检查 interface是否配置了Mock功能，如果配置了 Mock ，则会根据相应的Mock 配置去初始化 MockInvoker，这是一个过滤器，
         // Dubbo里面第一个过滤器，在功能上直接决定了Dubbo 一些重要功能，Mock 就是一个例子。
-        checkMock(interfaceClass);
-        
-        
+        checkMock(interfaceClass);      // FIXME Mock的支持
+
+
+        // ==============集中配置信息=================
         Map<String, String> map = new HashMap<String, String>(); // 用来存放所有配置
         map.put(SIDE_KEY, CONSUMER_SIDE); // 声明这是consumer这边的
         // 添加运行时信息：dubbo(version),release,timestamp,pid
         appendRuntimeParameters(map);
         
-        if (!isGeneric()) { // 非泛化调用
+        if (!isGeneric()) { // 非泛化调用  TODO Generic是什么？后续怎么处理下面这些参数的？
+            // FIXME 使用GenericService调用接口的好处是不需要依赖服务提供方给的interface，只需要知道接口的全类名，方法名，参数列表就能调用dubbo方法，拿到返回值，这种调用称为泛化调用
             String revision = Version.getVersion(interfaceClass, version);
             if (revision != null && revision.length() > 0) {
                 map.put(REVISION_KEY, revision);
@@ -326,41 +329,55 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
                 map.put(METHODS_KEY, StringUtils.join(new HashSet<String>(Arrays.asList(methods)), COMMA_SEPARATOR));
             }
         }
+        // -------------------------------✨ 分割线 ✨------------------------------
+
         map.put(INTERFACE_KEY, interfaceName);	// 设置interfaceName
-        // 设置metrics参数 FIXME？？
-        appendParameters(map, metrics);	
+
+        // 设置metrics参数  FIXME metirics？？
+        appendParameters(map, metrics);
+
         // 设置application中的参数
-        appendParameters(map, application);	
-        // 设置module中的参数 FIXME？？
-        appendParameters(map, module);	
+        appendParameters(map, application);
+
+        // 设置module中的参数
+        appendParameters(map, module);
+
         // remove 'default.' prefix for configs from ConsumerConfig
         // appendParameters(map, consumer, Constants.DEFAULT_KEY);
-        // 设置consumer中的参数 FIXME？？
-        appendParameters(map, consumer);	
+        // 设置consumer中的参数 ConsumerConfig
+        appendParameters(map, consumer);
+
         // 设置当前config，即referenceConfig
         appendParameters(map, this);
+
+        // -------------------------------✨ 分割线 ✨------------------------------
+        // MethodConfig
         Map<String, Object> attributes = null;
-        
-        
         if (CollectionUtils.isNotEmpty(methods)) {
+            // 遍历 MethodConfig 列表
             attributes = new HashMap<String, Object>();
             for (MethodConfig methodConfig : methods) {
             	// 设置所有methodsConfig配置到map中
                 appendParameters(map, methodConfig, methodConfig.getName());
-                
-                // FIXME ?? retry参数特殊处理？？
+
+                // == 翻译 方法.retry=false => 方法.retries=0 ==
                 String retryKey = methodConfig.getName() + ".retry";
+                // 检测 map 是否包含 methodName.retry
                 if (map.containsKey(retryKey)) {
                     String retryValue = map.remove(retryKey);
+                    // retry 值是false的话设置retries未0
                     if ("false".equals(retryValue)) {
+                        // 添加重试次数配置 methodName.retries
                         map.put(methodConfig.getName() + ".retries", "0");
                     }
                 }
-                // FIXME ??
+
+                // 提取方法配置参数
                 attributes.put(methodConfig.getName(), convertMethodConfig2AyncInfo(methodConfig));
             }
         }
 
+        // -------------------------------✨ 分割线 ✨------------------------------
         // 检查“DUBBO_IP_TO_REGISTRY”参数
         String hostToRegistry = ConfigUtils.getSystemProperty(DUBBO_IP_TO_REGISTRY);
         if (StringUtils.isEmpty(hostToRegistry)) {
@@ -371,12 +388,12 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
         map.put(REGISTER_IP_KEY, hostToRegistry);
 
         // 创建代理对象！！！！
-        ref = createProxy(map);
+        ref = createProxy(map);     // FIXME **客户端创建服务的代理对象**
 
         // 构造一个serviceKey
         String serviceKey = URL.buildKey(interfaceName, group, version);
         
-        // 初始化一个ApplicationModel对象
+        // 初始化一个ConsumerModel对象到ApplicationModel中  TODO 这里的ConsumerModel和上面创建的代理对象有什么关系，调用时怎么处理的？
         ApplicationModel.initConsumerModel(serviceKey, buildConsumerModel(serviceKey, attributes));
         initialized = true; // 设置标志，防止重复初始化
     }
@@ -397,8 +414,10 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
 
     @SuppressWarnings({"unchecked", "rawtypes", "deprecation"})
     private T createProxy(Map<String, String> map) {
-    	// 是否为jvm应用
-        if (shouldJvmRefer(map)) {
+
+        // =============================获取服务的urls=================================
+    	// 是否是本地引用
+        if (shouldJvmRefer(map)) {  // FIXME 判断injvm变量配置，若为空则通过InjvmProtoco中是否有存货来判断；若有值就以那个值为准
         	// 构造一个127.0.0.1的url
             URL url = new URL(LOCAL_PROTOCOL, LOCALHOST_VALUE, 0, interfaceClass.getName()).addParameters(map);
             // 构造并初始化invoker
@@ -407,14 +426,13 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
                 logger.info("Using injvm service " + interfaceClass.getName());
             }
         } else {
-        	// retry时会再次加入urls，防止内存溢出，这里每次清理一下urls
+        	// retry时会再次加入urls，防止内存溢出，这里每次清理一下urls TODO urls存放的是可用服务的地址？？
             urls.clear(); // reference retry init will add url to urls, lead to OOM
             
-            // 是否指定了url
+            // 是否指定了url； url 不为空，表明用户可能想进行点对点调用； url可以是目标服务地址，也可以是注册中心的地址
             if (url != null && url.length() > 0) { // user specified URL, could be peer-to-peer address, or register center's address.
-            	// ====指定了自定义url参数====
-                // 分割url,解析url并加入urls中，可以是注册中心地址或直接的应用地址
-            	String[] us = SEMICOLON_SPLIT_PATTERN.split(url);
+                // FIXME  ====1. 指定了自定义url参数====
+            	String[] us = SEMICOLON_SPLIT_PATTERN.split(url);  // 多个url用逗号分割
                 if (us != null && us.length > 0) {
                     for (String u : us) {
                         URL url = URL.valueOf(u);
@@ -422,31 +440,32 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
                             url = url.setPath(interfaceName);
                         }
                         if (REGISTRY_PROTOCOL.equals(url.getProtocol())) {
-                        	// url是注册中心
+                        	// url是注册中心，则在注册中心URL基础上加上refer子参数指定服务配置信息，作为服务url使用
                             urls.add(url.addParameterAndEncoded(REFER_KEY, StringUtils.toQueryString(map)));
                         } else {
-                        	// 不是注册中心地址
+                        	// 不是注册中心地址，那就是直接目标地址呗，直接将map中的内容合并到url中作为服务url使用
                             urls.add(ClusterUtils.mergeUrl(url, map));
                         }
                     }
                 }
             } else { // assemble URL from register center's configuration
-            	// ====未指定自定义url参数====
+            	// FIXME  ====2. 未指定自定义url参数，则通过注册中心来组装url====
                 // if protocols not injvm checkRegistry
-                if (!LOCAL_PROTOCOL.equalsIgnoreCase(getProtocol())){ // 非jvm应用
+                if (!LOCAL_PROTOCOL.equalsIgnoreCase(getProtocol())){ // injvm就不组装url了（能直接通过InjvmProtocol.invokers获取目标invoker了）
                 	// 检查registries里配置的注册中心否存在,需成功连接注册中心
                     checkRegistry();
                     // 获取注册中心配置url列表
                     List<URL> us = loadRegistries(false);
                     if (CollectionUtils.isNotEmpty(us)) {
                         for (URL u : us) {
-                        	// 监控？？？FIXME
-                            URL monitorUrl = loadMonitor(u);
+                            // 遍历所有注册中心URL
+
+                            URL monitorUrl = loadMonitor(u); // 加载监控中心URL，配置到服务参数中
                             if (monitorUrl != null) {
                                 map.put(MONITOR_KEY, URL.encode(monitorUrl.toFullString()));
                             }
-                            // 操作同上
-                            urls.add(u.addParameterAndEncoded(REFER_KEY, StringUtils.toQueryString(map)));
+
+                            urls.add(u.addParameterAndEncoded(REFER_KEY, StringUtils.toQueryString(map)));  // 在注册中心URL基础上加上refer子参数指定服务配置信息，作为服务url使用
                         }
                     }
                     if (urls.isEmpty()) {
@@ -455,12 +474,19 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
                     }
                 }
             }
-            
+
+
+
+            // =============================通过urls获取invoker=================================
+
             if (urls.size() == 1) {
-            	// 单个注册中心或服务提供者(服务直连，下同)
-            	// org.apache.dubbo.rpc.Protocol$Adaptive@4c060c8f  FIXME Adaptive是什么
-                invoker = REF_PROTOCOL.refer(interfaceClass, urls.get(0));
+            	// 找了半天就找到了一个，还搞啥集群自行车！！！那就直接用这个url来构建呗
+                // 通过Protocol自适应扩展获取protocol实现对象，构建Invoker实例，这里的protocol到底是什么，取决于URL中的protocol值是什么，默认是dubbo，如下：
+                /** @see org.apache.dubbo.registry.integration.RegistryProtocol#refer(Class, URL) */
+                invoker = REF_PROTOCOL.refer(interfaceClass, urls.get(0));  // FIXME 只有一个url，那也就只有一个invoker，只能是他了
             } else {
+                // 哎呦，找到好几个 url，咋办？
+
             	// 多个注册中心或多个服务提供者，或者两者混合
                 List<Invoker<?>> invokers = new ArrayList<Invoker<?>>();
                 URL registryURL = null;
@@ -468,30 +494,31 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
                 // 获取所有的 Invoker
                 for (URL url : urls) {
                 	// 通过 refprotocol 调用 refer 构建 Invoker，refprotocol 会在运行时
-                    // 根据 url 协议头加载指定的 Protocol 实例（FIXME 这是SPI？？），并调用实例的 refer 方法
-                    invokers.add(REF_PROTOCOL.refer(interfaceClass, url));
-                    if (REGISTRY_PROTOCOL.equals(url.getProtocol())) {
-                    	// 多个注册中心，这里会覆盖，只会取到最后遍历的那个
+                    // 根据 url 协议头加载指定的 Protocol 实例，默认dubbo:RegistryProtocol
+                    invokers.add(REF_PROTOCOL.refer(interfaceClass, url));  // FIXME 构建Inoker实例，添加到invokers列表中
+
+                    if (REGISTRY_PROTOCOL.equals(url.getProtocol())) {  // 取最一个注册中配置（该url中的refer值有map信息哦），留存为registryURL TODO 这选择是不是太草率了，还是就没关系
                         registryURL = url; // use last registry url
                     }
                 }
-                
-                // FIXME ？？ CLUSTER怎么工作的，join方法做了什么，StaticDirectory有什么作用
+
+                // ------------到这里，已经搞出引用invokers了，后面干啥？ FIXME 在所有inbokers列表中选出一个invoker（集群、负载均衡等考虑）
                 if (registryURL != null) { // registry url is available
-                    // use RegistryAwareCluster only when register's CLUSTER is available
-                	// 注册中心的cluster可用（FIXME 这可用是什么意思？？），则将使用RegistryAwareCluster
+                    // 如果registryURL不为空，则指定下面的CLUSTER自适应扩展用的实例为RegistryAwareCluster
                     URL u = registryURL.addParameter(CLUSTER_KEY, RegistryAwareCluster.NAME);
+
                     // 创建 StaticDirectory 实例，并由 Cluster 对多个 Invoker 进行合并
-                    // 此时包装顺序则为: 
-                    // RegistryAwareClusterInvoker(StaticDirectory) 
-                    // -> FailoverClusterInvoker(RegistryDirectory, will execute route) 
-                    // -> Invoker
-                    invoker = CLUSTER.join(new StaticDirectory(u, invokers));
+                    invoker = CLUSTER.join(new StaticDirectory(u, invokers));   // TODO　StaticDirectory是干嘛的,目录？Cluster是怎么工作的？
                 } else { // not a registry url, must be direct invoke.
+
+                    // 这里的Cluster自适应扩展的实例是：
+                    /** @see org.apache.dubbo.rpc.cluster.support.FailoverCluster#join(Directory)  */
                     invoker = CLUSTER.join(new StaticDirectory(invokers));
                 }
             }
         }
+
+        // =============================拿到invoker了，就需要用起来了呀，伪装（代理）成目标服务给调用方使用=================================
 
         // 看配置是否需要检查，在定义invoker时检查invoker是否可用
         if (shouldCheck() && !invoker.isAvailable()) {
@@ -508,10 +535,13 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
         MetadataReportService metadataReportService = null;
         if ((metadataReportService = getMetadataReportService()) != null) {
             URL consumerURL = new URL(CONSUMER_PROTOCOL, map.remove(REGISTER_IP_KEY), 0, map.get(INTERFACE_KEY), map);
-            metadataReportService.publishConsumer(consumerURL);
+            metadataReportService.publishConsumer(consumerURL);         // FIXME 报告元数据 TODO　干啥用的？
         }
+
         // 使用代理工厂，封装invoker创建一个代理对象
-        return (T) PROXY_FACTORY.getProxy(invoker);
+        /** ProxyFactory自适应扩展，取决于url.proxy变量配置，javassist值对应扩展如下：
+         * @see org.apache.dubbo.rpc.proxy.javassist.JavassistProxyFactory*/
+        return (T) PROXY_FACTORY.getProxy(invoker);     // FIXME 封装返回invoker代理对象，以被使用
     }
 
     /**
@@ -525,13 +555,14 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
     protected boolean shouldJvmRefer(Map<String, String> map) {
         URL tmpUrl = new URL("temp", "localhost", 0, map);
         boolean isJvmRefer;
+        // 判断injvm参数，若为空则通过InjvmProtoco中是否有存货来判断；若有值就以那个值为准
         if (isInjvm() == null) {
             // if a url is specified, don't do local reference
             if (url != null && url.length() > 0) {
                 isJvmRefer = false;
             } else {
                 // by default, reference local service if there is
-                isJvmRefer = InjvmProtocol.getInjvmProtocol().isInjvmRefer(tmpUrl);
+                isJvmRefer = InjvmProtocol.getInjvmProtocol().isInjvmRefer(tmpUrl);     // 在服务注册时，允许本地访问的服务会导出一份在InjvmProtocol中
             }
         } else {
             isJvmRefer = isInjvm();
