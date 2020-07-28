@@ -420,12 +420,13 @@ public class RegistryProtocol implements Protocol {
     @Override
     @SuppressWarnings("unchecked")
     public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
-    	// 拼凑url
+        // 取 registry 参数值，并将其设置为协议头
         url = URLBuilder.from(url)
                 .setProtocol(url.getParameter(REGISTRY_KEY, DEFAULT_REGISTRY))
                 .removeParameter(REGISTRY_KEY)
                 .build();
-        // 获取注册中心
+
+        // 获取注册中心实例
         Registry registry = registryFactory.getRegistry(url);
         if (RegistryService.class.equals(type)) {
             // 若构造的invoker是RegistryService类型
@@ -433,10 +434,14 @@ public class RegistryProtocol implements Protocol {
         }
 
         // group="a,b" or group="*"
+        // 将 url 查询字符串转为 Map,再获取group参数
         Map<String, String> qs = StringUtils.parseQueryString(url.getParameterAndDecoded(REFER_KEY));
         String group = qs.get(GROUP_KEY);
+
         if (group != null && group.length() > 0) {
             if ((COMMA_SPLIT_PATTERN.split(group)).length > 1 || "*".equals(group)) {
+                // 若group不为空，则通过 SPI 加载 MergeableCluster 实例，并调用 doRefer 继续执行服务引用逻辑
+                /** @see org.apache.dubbo.rpc.cluster.support.MergeableCluster TODO Cluster的工作原理是什么？？？待分析*/
                 return doRefer(getMergeableCluster(), registry, type, url);
             }
         }
@@ -448,20 +453,33 @@ public class RegistryProtocol implements Protocol {
     }
 
     private <T> Invoker<T> doRefer(Cluster cluster, Registry registry, Class<T> type, URL url) {
-        RegistryDirectory<T> directory = new RegistryDirectory<T>(type, url);
+        // 创建 RegistryDirectory 实例
+        RegistryDirectory<T> directory = new RegistryDirectory<T>(type, url);   // TODO　RegistryDirectory构造器对url做了哪些加工？这个对象的作用是啥？待分析
+        // 设置注册中心和协议
         directory.setRegistry(registry);
         directory.setProtocol(protocol);
+
         // all attributes of REFER_KEY
+        // url中refer对应值的所有属性
         Map<String, String> parameters = new HashMap<String, String>(directory.getUrl().getParameters());
+
+        // 生成服务消费者链接
         URL subscribeUrl = new URL(CONSUMER_PROTOCOL, parameters.remove(REGISTER_IP_KEY), 0, type.getName(), parameters);
+
+        // 注册服务消费者，在 consumers 目录下新节点
         if (!ANY_VALUE.equals(url.getServiceInterface()) && url.getParameter(REGISTER_KEY, true)) {
             directory.setRegisteredConsumerUrl(getRegisteredConsumerUrl(subscribeUrl, url));
             registry.register(directory.getRegisteredConsumerUrl());
         }
+
+        //  TODO 建立路由器链？？  干哈的？
         directory.buildRouterChain(subscribeUrl);
+
+        // 订阅 providers、configurators、routers 等节点数据
         directory.subscribe(subscribeUrl.addParameter(CATEGORY_KEY,
                 PROVIDERS_CATEGORY + "," + CONFIGURATORS_CATEGORY + "," + ROUTERS_CATEGORY));
 
+        // 一个注册中心可能有多个服务提供者，因此这里需要将多个服务提供者合并为一个
         Invoker invoker = cluster.join(directory);
         ProviderConsumerRegTable.registerConsumer(invoker, url, subscribeUrl, directory);
         return invoker;

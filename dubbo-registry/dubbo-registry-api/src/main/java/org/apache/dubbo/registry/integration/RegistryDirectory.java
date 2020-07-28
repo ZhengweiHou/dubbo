@@ -169,7 +169,7 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
         setConsumerUrl(url);
         CONSUMER_CONFIGURATION_LISTENER.addNotifyListener(this);
         serviceConfigurationListener = new ReferenceConfigurationListener(this, url);
-        registry.subscribe(url, this);
+        registry.subscribe(url, this);  // TODO 订阅？？
     }
 
 

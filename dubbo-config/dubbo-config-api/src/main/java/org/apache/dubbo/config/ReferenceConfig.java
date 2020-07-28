@@ -481,9 +481,14 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
 
             if (urls.size() == 1) {
             	// 找了半天就找到了一个，还搞啥集群自行车！！！那就直接用这个url来构建呗
-                // 通过Protocol自适应扩展获取protocol实现对象，构建Invoker实例，这里的protocol到底是什么，取决于URL中的protocol值是什么，默认是dubbo，如下：
-                /** @see org.apache.dubbo.registry.integration.RegistryProtocol#refer(Class, URL) */
-                invoker = REF_PROTOCOL.refer(interfaceClass, urls.get(0));  // FIXME 只有一个url，那也就只有一个invoker，只能是他了
+                // FIXME 通过Protocol自适应扩展获取protocol实现对象，构建Invoker实例，这里的protocol到底是什么,还记得前面提到refconfig是否直接指定url了吗?也就是是否直连的
+                //  若指定了url则此处的urls只会有一个，且url不是注册中心(url.protocol != registry)，则这里默认就是DubboProtocol；若是注册中心url(url.protocol = registry)则就是RegistryProtocol：
+                /**默认是dubbo=           FIXME 指定URL直连的，默认通过这个实例化invoker （ps：RegisterConfig指定了别的protocol就另说了，比如说http=org.apache.dubbo.rpc.protocol.http.HttpProtocol）
+                 * @see org.apache.dubbo.rpc.protocol.dubbo.DubboProtocol#refer(Class, URL) => protocolBindingRefer(Class, URL)
+                 * 另一个常用的 registry=  FIXME 通过注册中心获取服务的就通过这个实例化invoker
+                 * @see org.apache.dubbo.registry.integration.RegistryProtocol#refer(Class, URL)
+                 */
+                invoker = REF_PROTOCOL.refer(interfaceClass, urls.get(0));
             } else {
                 // 哎呦，找到好几个 url，咋办？
 
@@ -495,9 +500,9 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
                 for (URL url : urls) {
                 	// 通过 refprotocol 调用 refer 构建 Invoker，refprotocol 会在运行时
                     // 根据 url 协议头加载指定的 Protocol 实例，默认dubbo:RegistryProtocol
-                    invokers.add(REF_PROTOCOL.refer(interfaceClass, url));  // FIXME 构建Inoker实例，添加到invokers列表中
+                    invokers.add(REF_PROTOCOL.refer(interfaceClass, url));  // FIXME 构建Inoker实例，添加到invokers列表中 这里的分析同上
 
-                    if (REGISTRY_PROTOCOL.equals(url.getProtocol())) {  // 取最一个注册中配置（该url中的refer值有map信息哦），留存为registryURL TODO 这选择是不是太草率了，还是就没关系
+                    if (REGISTRY_PROTOCOL.equals(url.getProtocol())) {  // 取最一个注册中配置（该url中的refer值有map信息哦），留存为registryURL TODO 这选择是不是太草率了，不该有个什么策略吗？还是就没关系？？
                         registryURL = url; // use last registry url
                     }
                 }

@@ -434,7 +434,7 @@ public class DubboProtocol extends AbstractProtocol {
         optimizeSerialization(url);
 
         // create rpc invoker.
-        DubboInvoker<T> invoker = new DubboInvoker<T>(serviceType, url, getClients(url), invokers);
+        DubboInvoker<T> invoker = new DubboInvoker<T>(serviceType, url, getClients(url), invokers);     // FIXME 创建DubboInboker
         invokers.add(invoker);
 
         return invoker;
@@ -442,31 +442,38 @@ public class DubboProtocol extends AbstractProtocol {
 
     private ExchangeClient[] getClients(URL url) {
         // whether to share connection
-
+        // 是否共享连接 默认false
         boolean useShareConnect = false;
 
+        // 获取连接数，默认为0，表示未配置
         int connections = url.getParameter(CONNECTIONS_KEY, 0);
         List<ReferenceCountExchangeClient> shareClients = null;
         // if not configured, connection is shared, otherwise, one connection for one service
+        // 如果未配置 connections，则共享连接；否则一个服务一个连接
         if (connections == 0) {
             useShareConnect = true;
 
             /**
              * The xml configuration should have a higher priority than properties.
              */
+            // 获取共享连接数 shareconnections 变量，xml中的配置优先于运行变量配置，若都没配置则取默认值 1  ps:ConsumerConfig中能配置shareconnections
             String shareConnectionsStr = url.getParameter(SHARE_CONNECTIONS_KEY, (String) null);
             connections = Integer.parseInt(StringUtils.isBlank(shareConnectionsStr) ? ConfigUtils.getProperty(SHARE_CONNECTIONS_KEY,
                     DEFAULT_SHARE_CONNECTIONS) : shareConnectionsStr);
-            shareClients = getSharedClient(url, connections);
+
+            shareClients = getSharedClient(url, connections);   // FIXME 获取共享客户端
         }
 
+        // 按照连接数，初始化clients数组长度
         ExchangeClient[] clients = new ExchangeClient[connections];
         for (int i = 0; i < clients.length; i++) {
             if (useShareConnect) {
+                // 取共享客户端
                 clients[i] = shareClients.get(i);
 
             } else {
-                clients[i] = initClient(url);
+                // 初始化新的客户端
+                clients[i] = initClient(url);   // FIXME 初始化新客户端
             }
         }
 
@@ -481,36 +488,46 @@ public class DubboProtocol extends AbstractProtocol {
      */
     private List<ReferenceCountExchangeClient> getSharedClient(URL url, int connectNum) {
         String key = url.getAddress();
-        List<ReferenceCountExchangeClient> clients = referenceClientMap.get(key);
 
-        if (checkClientCanUse(clients)) {
+        // ==从缓冲中获取clients==
+        // 获取带有“引用计数”功能的 ExchangeClient
+        List<ReferenceCountExchangeClient> clients = referenceClientMap.get(key);
+        if (checkClientCanUse(clients)) {   // 检查clients列表中client是否全部可用
+            // 增加列表中所有client引用计数
             batchClientRefIncr(clients);
             return clients;
         }
 
+        // ==缓存中没有，或者存在连接不可用==
+
         locks.putIfAbsent(key, new Object());
-        synchronized (locks.get(key)) {
+        synchronized (locks.get(key)) { // 只锁定目标key
+
+            // 双重检查，进入锁定后再次检查缓存，若有则返回clients
             clients = referenceClientMap.get(key);
-            // dubbo check
+            // dubbo check    DDFAsdsddf
             if (checkClientCanUse(clients)) {
                 batchClientRefIncr(clients);
                 return clients;
             }
+
 
             // connectNum must be greater than or equal to 1
             connectNum = Math.max(connectNum, 1);
 
             // If the clients is empty, then the first initialization is
             if (CollectionUtils.isEmpty(clients)) {
-                clients = buildReferenceCountExchangeClientList(url, connectNum);
+                clients = buildReferenceCountExchangeClientList(url, connectNum);   // FIXME 创建client？？
                 referenceClientMap.put(key, clients);
 
             } else {
+                // clients不为空，但存在不可用client
                 for (int i = 0; i < clients.size(); i++) {
                     ReferenceCountExchangeClient referenceCountExchangeClient = clients.get(i);
                     // If there is a client in the list that is no longer available, create a new one to replace him.
                     if (referenceCountExchangeClient == null || referenceCountExchangeClient.isClosed()) {
-                        clients.set(i, buildReferenceCountExchangeClient(url));
+                        clients.set(i, buildReferenceCountExchangeClient(url)); // FIXME 见不可用连接替换成新创建的client
+                        // 新连接不替换掉referenceClientMap里的吗？ 因为，clients引用的对象在上面一句就被修改了
                         continue;
                     }
 
@@ -561,6 +578,7 @@ public class DubboProtocol extends AbstractProtocol {
 
         for (ReferenceCountExchangeClient referenceCountExchangeClient : referenceCountExchangeClients) {
             if (referenceCountExchangeClient != null) {
+                // 增加引用计数
                 referenceCountExchangeClient.incrementAndGetCount();
             }
         }
