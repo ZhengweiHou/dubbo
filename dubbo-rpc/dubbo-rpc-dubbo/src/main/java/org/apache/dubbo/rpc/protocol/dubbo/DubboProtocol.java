@@ -594,7 +594,7 @@ public class DubboProtocol extends AbstractProtocol {
     private List<ReferenceCountExchangeClient> buildReferenceCountExchangeClientList(URL url, int connectNum) {
         List<ReferenceCountExchangeClient> clients = new ArrayList<>();
 
-        for (int i = 0; i < connectNum; i++) {
+        for (int i = 0; i < connectNum; i++) {  // 构建若干个client加入到clients中
             clients.add(buildReferenceCountExchangeClient(url));
         }
 
@@ -608,8 +608,9 @@ public class DubboProtocol extends AbstractProtocol {
      * @return
      */
     private ReferenceCountExchangeClient buildReferenceCountExchangeClient(URL url) {
-        ExchangeClient exchangeClient = initClient(url);
+        ExchangeClient exchangeClient = initClient(url);    // FIXME 创建 ExchangeClient 客户端
 
+        // 将 ExchangeClient 实例传给 ReferenceCountExchangeClient，这里使用了装饰模式
         return new ReferenceCountExchangeClient(exchangeClient);
     }
 
@@ -621,13 +622,17 @@ public class DubboProtocol extends AbstractProtocol {
     private ExchangeClient initClient(URL url) {
 
         // client type setting.
+        // 获取客户端类型，没设置则和server一直，都没设置默认netty
         String str = url.getParameter(CLIENT_KEY, url.getParameter(SERVER_KEY, DEFAULT_REMOTING_CLIENT));
 
+        // 添加编解码参数到 url 中 TODO 编解码协议只能是dubbo？
         url = url.addParameter(CODEC_KEY, DubboCodec.NAME);
         // enable heartbeat by default
+        // 添加心跳参数到 url 中    FIXME 默认开启心跳，默认 1次/分钟
         url = url.addParameterIfAbsent(HEARTBEAT_KEY, String.valueOf(DEFAULT_HEARTBEAT));
 
         // BIO is not allowed since it has severe performance issue.
+        // 检测客户端类型是否可用（不允许使用BIO），不符需求则抛出异常
         if (str != null && str.length() > 0 && !ExtensionLoader.getExtensionLoader(Transporter.class).hasExtension(str)) {
             throw new RpcException("Unsupported client type: " + str + "," +
                     " supported client type is " + StringUtils.join(ExtensionLoader.getExtensionLoader(Transporter.class).getSupportedExtensions(), " "));
@@ -636,11 +641,13 @@ public class DubboProtocol extends AbstractProtocol {
         ExchangeClient client;
         try {
             // connection should be lazy
+            // 获取 lazy 配置，并根据配置值决定创建的客户端类型
             if (url.getParameter(LAZY_CONNECT_KEY, false)) {
+                // 创建懒加载 ExchangeClient 实例
                 client = new LazyConnectExchangeClient(url, requestHandler);
-
             } else {
-                client = Exchangers.connect(url, requestHandler);
+                // 创建普通 ExchangeClient 实例
+                client = Exchangers.connect(url, requestHandler);   // FIXME 创建ExchangeClient
             }
 
         } catch (RemotingException e) {

@@ -111,6 +111,10 @@ public class Exchangers {
             throw new IllegalArgumentException("handler == null");
         }
         url = url.addParameterIfAbsent(Constants.CODEC_KEY, "exchange");
+        /** 通过url.exchanger值，SPI获取 Exchanger 实例，默认为:
+         * @see org.apache.dubbo.remoting.exchange.support.header.HeaderExchanger#connect(URL, ExchangeHandler)
+         * 获得对象：HeaderExchangeClient
+         */
         return getExchanger(url).connect(url, handler);
     }
 
