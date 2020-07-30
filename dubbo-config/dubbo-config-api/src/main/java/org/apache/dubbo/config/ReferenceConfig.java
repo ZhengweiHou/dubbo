@@ -418,7 +418,7 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
         // =============================获取服务的urls=================================
     	// 是否是本地引用
         if (shouldJvmRefer(map)) {  // FIXME 判断injvm变量配置，若为空则通过InjvmProtoco中是否有存货来判断；若有值就以那个值为准
-        	// 构造一个127.0.0.1的url
+        	// 构造一个127.0.0.1的url，protocol设置为injvm
             URL url = new URL(LOCAL_PROTOCOL, LOCALHOST_VALUE, 0, interfaceClass.getName()).addParameters(map);
             // 构造并初始化invoker
             invoker = REF_PROTOCOL.refer(interfaceClass, url);
@@ -476,7 +476,6 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
             }
 
 
-
             // =============================通过urls获取invoker=================================
 
             if (urls.size() == 1) {
@@ -510,9 +509,11 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
                 // ------------到这里，已经搞出引用invokers了，后面干啥？ FIXME 在所有inbokers列表中选出一个invoker（集群、负载均衡等考虑）
                 if (registryURL != null) { // registry url is available
                     // 如果registryURL不为空，则指定下面的CLUSTER自适应扩展用的实例为RegistryAwareCluster
+                    
                     URL u = registryURL.addParameter(CLUSTER_KEY, RegistryAwareCluster.NAME);
 
                     // 创建 StaticDirectory 实例，并由 Cluster 对多个 Invoker 进行合并
+                    /** @see RegistryAwareCluster#join(Directory)  */
                     invoker = CLUSTER.join(new StaticDirectory(u, invokers));   // TODO　StaticDirectory是干嘛的,目录？Cluster是怎么工作的？
                 } else { // not a registry url, must be direct invoke.
 

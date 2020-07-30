@@ -144,7 +144,7 @@ public abstract class AnnotationInjectedBeanPostProcessor extends
 
         InjectionMetadata metadata = findInjectionMetadata(beanName, bean.getClass(), pvs);
         try {
-            metadata.inject(bean, beanName, pvs);
+            metadata.inject(bean, beanName, pvs);   //
         } catch (BeanCreationException ex) {
             throw ex;
         } catch (Throwable ex) {

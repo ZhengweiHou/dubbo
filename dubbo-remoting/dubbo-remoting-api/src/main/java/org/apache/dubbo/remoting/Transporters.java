@@ -82,7 +82,7 @@ public class Transporters {
         }
 
         /**根据url中transporter（优先）或client值 获取 Transporter 自适应拓展类，默认netty：
-         * @see org.apache.dubbo.remoting.transport.netty4.NettyTransporter#connect(URL, ChannelHandler) 
+         * @see org.apache.dubbo.remoting.transport.netty4.NettyTransporter#connect(URL, ChannelHandler)
          * 并调用 connect 方法生成 Client 实例
          */
         return getTransporter().connect(url, handler);
