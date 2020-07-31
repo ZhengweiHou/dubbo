@@ -41,6 +41,7 @@ import org.apache.dubbo.rpc.ProxyFactory;
 import org.apache.dubbo.rpc.RpcException;
 import org.apache.dubbo.rpc.cluster.Cluster;
 import org.apache.dubbo.rpc.cluster.Configurator;
+import org.apache.dubbo.rpc.cluster.Directory;
 import org.apache.dubbo.rpc.model.ApplicationModel;
 import org.apache.dubbo.rpc.protocol.InvokerWrapper;
 
@@ -422,7 +423,7 @@ public class RegistryProtocol implements Protocol {
     public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
         // 取 registry 参数值，并将其设置为协议头
         url = URLBuilder.from(url)
-                .setProtocol(url.getParameter(REGISTRY_KEY, DEFAULT_REGISTRY))
+                .setProtocol(url.getParameter(REGISTRY_KEY, DEFAULT_REGISTRY))  // registry : dubbo
                 .removeParameter(REGISTRY_KEY)
                 .build();
 
@@ -445,7 +446,7 @@ public class RegistryProtocol implements Protocol {
                 return doRefer(getMergeableCluster(), registry, type, url);
             }
         }
-        return doRefer(cluster, registry, type, url);
+        return doRefer(cluster, registry, type, url);   // FIXME 这里默认的cluster是什么？ 这里的cluster是自适应扩展Cluster$Adaptive
     }
 
     private Cluster getMergeableCluster() {
@@ -479,8 +480,13 @@ public class RegistryProtocol implements Protocol {
         directory.subscribe(subscribeUrl.addParameter(CATEGORY_KEY,
                 PROVIDERS_CATEGORY + "," + CONFIGURATORS_CATEGORY + "," + ROUTERS_CATEGORY));
 
-        // 一个注册中心可能有多个服务提供者，因此这里需要将多个服务提供者合并为一个
-        Invoker invoker = cluster.join(directory);
+        // FIXME 一个注册中心可能有多个服务提供者，因此这里需要将多个服务提供者合并为一个
+        /** @see org.apache.dubbo.rpc.cluster.support.FailoverCluster#join(Directory)
+         *  @see org.apache.dubbo.rpc.cluster.support.MergeableCluster#join(Directory)  配置了group
+         */
+        Invoker invoker = cluster.join(directory);  // TODO Cluster.join 干啥呢？Cluster将多个服务节点合并成一个Invoker？
+
+        
         ProviderConsumerRegTable.registerConsumer(invoker, url, subscribeUrl, directory);
         return invoker;
     }

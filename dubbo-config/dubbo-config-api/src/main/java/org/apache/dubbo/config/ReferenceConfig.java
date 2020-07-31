@@ -421,6 +421,8 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
         	// 构造一个127.0.0.1的url，protocol设置为injvm
             URL url = new URL(LOCAL_PROTOCOL, LOCALHOST_VALUE, 0, interfaceClass.getName()).addParameters(map);
             // 构造并初始化invoker
+            /** @see InjvmProtocol#refer(Class, URL) 
+             * @see InjvmProtocol#protocolBindingRefer(Class, URL) */
             invoker = REF_PROTOCOL.refer(interfaceClass, url);
             if (logger.isInfoEnabled()) {
                 logger.info("Using injvm service " + interfaceClass.getName());
