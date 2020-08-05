@@ -285,7 +285,7 @@ public class RegistryProtocol implements Protocol {
             Invoker<?> invokerDelegate = new InvokerDelegate<>(originInvoker, providerUrl);
             /**
              * 调用 protocol 的 export 方法导出服务，这里的protocol会自适应调用  (FIXME 这个操作同级对比InjvmProtocol的导出动作)
-             * @see org.apache.dubbo.rpc.protocol.dubbo.DubboProtocol
+             * @see org.apache.dubbo.rpc.protocol.dubbo.DubboProtocol#export(Invoker) 
              */
             return new ExporterChangeableWrapper<>((Exporter<T>) protocol.export(invokerDelegate), originInvoker);
         });

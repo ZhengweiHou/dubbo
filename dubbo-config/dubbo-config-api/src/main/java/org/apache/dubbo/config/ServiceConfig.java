@@ -489,7 +489,7 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         Map<String, String> map = new HashMap<String, String>();
         map.put(SIDE_KEY, PROVIDER_SIDE);
 
-        appendRuntimeParameters(map);   // 这在前面哪做过？
+        appendRuntimeParameters(map);
 
         appendParameters(map, metrics); // TODO metrics是什么配置？ metrics为微服务的监控提供数据基础；是一个标准度量库，对监控对象的数据采集进行了统一封装。
         appendParameters(map, application);
@@ -805,7 +805,7 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                 */
                 // 为服务提供实现类（ref）生成Invoker
                 /**这里的PROXY_FACTORY是ProxyFactory.class的自适应扩展，其默认实现是JavassistProxyFactory
-                 * @see org.apache.dubbo.rpc.proxy.javassist.JavassistProxyFactory
+                 * @see org.apache.dubbo.rpc.proxy.javassist.JavassistProxyFactory#getInvoker(Object, Class, URL)
                  */
                 Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString())); // registryURL.export = url
 
@@ -817,7 +817,7 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                 //  注意这里的protocol是一个自适应扩展，真正实现类会通过invoker中的url中的protocol参数值作为扩展类name去获取扩展
                 /**
                  * 这里的protocol会自适应调用
-                 * @see org.apache.dubbo.registry.integration.RegistryProtocol
+                 * @see org.apache.dubbo.registry.integration.RegistryProtocol#export(Invoker)
                  */
                 // url.protocol  ==>  registry=org.apache.dubbo.registry.integration.RegistryProtocol
                 Exporter<?> exporter = protocol.export(wrapperInvoker);
