@@ -233,18 +233,19 @@ public class RegistryProtocol implements Protocol {
         // ==================================================================
 
         //export invoker
-        // TODO 启动服务端（netty或其他，取决于扩展方式），（我理解的这是导出远程调用协议对应的服务端代理，和initJvm）
+        // 启动服务端（netty或其他，取决于扩展方式），（我理解的这是导出远程调用协议对应的服务端代理，和initJvm）
         final ExporterChangeableWrapper<T> exporter = doLocalExport(originInvoker, providerUrl);    // FIXME **导出服务,启动netty或其他服务端，绑定处理等**
 
         // 根据 URL 加载 Registry 实现类，比如 ZookeeperRegistry
         final Registry registry = getRegistry(originInvoker);   // FIXME **创建注册中心，实际上就是通过注册中心客户端**
 
-        // 获取已注册的服务提供者 URL，比如：  TODO 这是从注册中心获取的吗？
+
+        // 加工providerUrl为将要注册到注册中心中的样式
         // dubbo://10.252.12.30:20881/com.hzw.learn.springboot.dubbo.hello.provider.Hi?anyhost=true&application=provider_api&deprecated=false&dubbo=2.0.2&dubbo.tag=xxx&dynamic=true&generic=false&group=2222&interface=com.hzw.learn.springboot.dubbo.hello.provider.Hi&loadbalance=roundrobin&methods=async_sayhi,sayhi&pid=544981&register=true&release=2.7.3-hzwtest&revision=1.0.0&side=provider&telnet=cd,ps,select,log,ls,clear,count,invoke,exit,help,trace,pwd,shutdown,status&timestamp=1595558006783&version=1.0.0
         final URL registeredProviderUrl = getRegisteredProviderUrl(providerUrl, registryUrl);
 
 
-        // 向服务提供者与消费者注册表中注册服务提供者
+        // 向服务提供者与消费者注册表中注册服务提供者 TODO 这是在干嘛？本地缓存？
         ProviderInvokerWrapper<T> providerInvokerWrapper = ProviderConsumerRegTable.registerProvider(originInvoker,
                 registryUrl, registeredProviderUrl);
 
@@ -366,20 +367,25 @@ public class RegistryProtocol implements Protocol {
     private URL getRegisteredProviderUrl(final URL providerUrl, final URL registryUrl) {
         //The address you see at the registry
         if (!registryUrl.getParameter(SIMPLIFIED_KEY, false)) {
+
             return providerUrl.removeParameters(getFilteredKeys(providerUrl)).removeParameters(
                     MONITOR_KEY, BIND_IP_KEY, BIND_PORT_KEY, QOS_ENABLE, QOS_PORT, ACCEPT_FOREIGN_IP, VALIDATION_KEY,
                     INTERFACES);
         } else {
+            // if simple the registry for provider
+            // After simplify the registry, should add some paramter individually for provider
             String extraKeys = registryUrl.getParameter(EXTRA_KEYS_KEY, "");
             // if path is not the same as interface name then we should keep INTERFACE_KEY,
             // otherwise, the registry structure of zookeeper would be '/dubbo/path/providers',
             // but what we expect is '/dubbo/interface/providers'
+            // 如果path与接口名称不同，则应保留INTERFACE_KEY，否则，Zookeeper的注册表结构将为'/dubbo/path/providers'，但我们期望的是'/dubbo/interface/providers'
             if (!providerUrl.getPath().equals(providerUrl.getParameter(INTERFACE_KEY))) {
                 if (StringUtils.isNotEmpty(extraKeys)) {
                     extraKeys += ",";
                 }
                 extraKeys += INTERFACE_KEY;
             }
+            // 获取注册参数
             String[] paramsToRegistry = getParamsToRegistry(DEFAULT_REGISTER_PROVIDER_KEYS
                     , COMMA_SPLIT_PATTERN.split(extraKeys));
             return URL.valueOf(providerUrl, paramsToRegistry, providerUrl.getParameter(METHODS_KEY, (String[]) null));
